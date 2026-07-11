@@ -362,20 +362,10 @@ private struct TaskRow: View {
                 .lineLimit(1)
             Spacer()
             if aggregate.meta.isRecurring {
-                Text("Recurring")
-                    .font(.caption2)
-                    .padding(.horizontal, 5).padding(.vertical, 1)
-                    .background(Color.purple.opacity(0.15))
-                    .foregroundStyle(Color.purple)
-                    .clipShape(Capsule())
+                Text("🔁").font(.caption)
             }
             if isCurrentInContext {
-                Text("Current")
-                    .font(.caption2)
-                    .padding(.horizontal, 5).padding(.vertical, 1)
-                    .background(Color.accentColor.opacity(0.15))
-                    .foregroundStyle(Color.accentColor)
-                    .clipShape(Capsule())
+                Text("⚡").font(.caption)
             }
         }
         .padding(.vertical, 2)

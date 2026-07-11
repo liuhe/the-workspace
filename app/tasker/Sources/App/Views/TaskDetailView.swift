@@ -201,12 +201,7 @@ private struct TaskInfoSection: View {
                 .foregroundStyle(badgeColor)
                 .clipShape(Capsule())
             if aggregate.meta.isRecurring {
-                Text("Recurring")
-                    .font(.caption2)
-                    .padding(.horizontal, 6).padding(.vertical, 2)
-                    .background(Color.purple.opacity(0.15))
-                    .foregroundStyle(Color.purple)
-                    .clipShape(Capsule())
+                Text("🔁").font(.body)
             }
         }
     }
