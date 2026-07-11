@@ -82,7 +82,7 @@ private struct MembershipBar: View {
     private func dayListItem(_ a: DayAssignment) -> String {
         var parts = [a.day.descriptionWithWeekday]
         if !a.priority.emoji.isEmpty { parts.append(a.priority.emoji) }
-        if a.isCurrent { parts.append("⚡") }
+        if a.isCurrent { parts.append("👀") }
         return parts.joined(separator: " ")
     }
 

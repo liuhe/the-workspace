@@ -365,7 +365,7 @@ private struct TaskRow: View {
                 Text("🔁").font(.caption)
             }
             if isCurrentInContext {
-                Text("⚡").font(.caption)
+                Text("👀").font(.caption)
             }
         }
         .padding(.vertical, 2)
