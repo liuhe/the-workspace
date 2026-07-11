@@ -9,6 +9,7 @@
 - `.claude/` — 项目级 Claude Code 配置（hooks、skills、settings）
 - `.claude_global/` — 3 个软链，指向 `~/.claude/` 下的全局配置（gitignored）
 - `docs/` — 文档（含 `docs/modeling/` DCDDP 系统模型；`docs/modeling/viewer/` 静态 viewer，gitignored）
+  - `docs/tasker-storage.md` — tasker app 磁盘存储格式说明
 - `projects/` — 项目模式下的 initiative 容器（按需创建）；只放项目文档 (overview/tasks/log/design)，**不放代码**
 - `app/` — 实际应用代码根目录，每个 app 一个子目录（如 `app/tasker/`）；`projects/<name>/` 与 `app/<name>/` 通常同名，前者是项目管理产物，后者是实际交付物
 

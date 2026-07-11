@@ -12,16 +12,16 @@ struct ContentView: View {
             if store.selectedTask != nil {
                 TaskDetailView()
             } else {
-                ContentUnavailableView("选个任务", systemImage: "text.append",
-                                       description: Text("从左侧选择或新建"))
+                ContentUnavailableView("Select a task", systemImage: "text.append",
+                                       description: Text("Select from sidebar or create new"))
             }
         }
         .navigationTitle(navTitle)
-        .alert("出错了", isPresented: Binding(
+        .alert("Error", isPresented: Binding(
             get: { store.lastError != nil },
             set: { if !$0 { store.lastError = nil } }
         )) {
-            Button("好") { store.lastError = nil }
+            Button("OK") { store.lastError = nil }
         } message: {
             Text(store.lastError ?? "")
         }
@@ -35,6 +35,6 @@ struct ContentView: View {
         case .day(let d): base = d.descriptionWithWeekday
         case .backlog: base = "Backlog"
         }
-        return store.showCurrent ? "\(base) · 当前" : base
+        return store.showCurrent ? "\(base) · Current" : base
     }
 }

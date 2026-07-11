@@ -29,7 +29,7 @@ private struct MembershipBar: View {
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
             HStack(spacing: 4) {
-                Text("日期").font(.caption).foregroundStyle(.secondary)
+                Text("Days").font(.caption).foregroundStyle(.secondary)
                 ForEach(sortedAssignments, id: \.day) { a in
                     DayChip(assignment: a, taskId: aggregate.id)
                 }
@@ -50,7 +50,7 @@ private struct MembershipBar: View {
                     get: { aggregate.meta.membership.isCurrent },
                     set: { store.setIsCurrent(id: aggregate.id, isCurrent: $0) }
                 )) {
-                    Text("当前")
+                    Text("Current")
                 }
                 .toggleStyle(.switch)
                 .controlSize(.small)
@@ -137,7 +137,7 @@ private struct TaskInfoSection: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 10) {
                 statusBadge
-                TextField("任务标题", text: Binding(
+                TextField("Task title", text: Binding(
                     get: { aggregate.meta.title },
                     set: { new in store.updateMeta(id: aggregate.id) { $0.title = new } }
                 ))
@@ -148,7 +148,7 @@ private struct TaskInfoSection: View {
                     get: { aggregate.meta.isRecurring },
                     set: { store.setIsRecurring(id: aggregate.id, isRecurring: $0) }
                 )) {
-                    Text("循环")
+                    Text("Recurring")
                 }
                 .toggleStyle(.switch)
                 .controlSize(.small)
@@ -210,7 +210,7 @@ private struct TaskInfoSection: View {
                 .foregroundStyle(badgeColor)
                 .clipShape(Capsule())
             if aggregate.meta.isRecurring {
-                Text("循环")
+                Text("Recurring")
                     .font(.caption2)
                     .padding(.horizontal, 6).padding(.vertical, 2)
                     .background(Color.purple.opacity(0.15))
@@ -245,18 +245,18 @@ private struct EntriesSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("时间记录").font(.headline)
+                Text("Time entries").font(.headline)
                 Spacer()
                 Button {
                     store.addEntry(taskId: aggregate.id)
                 } label: {
-                    Label("新建", systemImage: "plus.circle")
+                    Label("Add", systemImage: "plus.circle")
                 }
                 .buttonStyle(.plain)
             }
 
             if aggregate.entries.isEmpty {
-                Text("还没有记录").foregroundStyle(.secondary).padding(.vertical, 6)
+                Text("No entries yet").foregroundStyle(.secondary).padding(.vertical, 6)
             } else {
                 VStack(spacing: 0) {
                     ForEach(aggregate.entries, id: \.id) { e in
@@ -278,7 +278,7 @@ private struct EntryRow: View {
         HStack(spacing: 10) {
             workTypePicker
 
-            TextField("这段的标题", text: Binding(
+            TextField("Entry title", text: Binding(
                 get: { entry.title },
                 set: { new in store.updateEntry(taskId: taskId, entryId: entry.id) { $0.title = new } }
             ))
@@ -288,9 +288,9 @@ private struct EntryRow: View {
             timeControls
 
             Menu {
-                Button("(无)") { setMarker(nil) }
-                Button("完成") { setMarker(.done) }
-                Button("开始新阶段") { setMarker(.restart) }
+                Button("(None)") { setMarker(nil) }
+                Button("Done") { setMarker(.done) }
+                Button("New phase") { setMarker(.restart) }
             } label: {
                 markerBadge
             }
@@ -331,7 +331,7 @@ private struct EntryRow: View {
     private var timeControls: some View {
         HStack(spacing: 4) {
             if entry.startAt == nil {
-                Button("开始") { store.startEntry(taskId: taskId, entryId: entry.id) }
+                Button("Start") { store.startEntry(taskId: taskId, entryId: entry.id) }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
             } else {
@@ -350,7 +350,7 @@ private struct EntryRow: View {
             if entry.startAt == nil {
                 Text("--:--").font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary)
             } else if entry.endAt == nil {
-                Button("结束") { store.endEntry(taskId: taskId, entryId: entry.id) }
+                Button("End") { store.endEntry(taskId: taskId, entryId: entry.id) }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
             } else {

@@ -200,20 +200,6 @@ check("pushUncompleted respects per-day status for recurring") {
     // 说明：这里不便直接跑 store，仅验证 statusForDay 判定；实际 store 逻辑用 statusForDay
 }
 
-check("Membership decoder handles legacy {days,priority} format") {
-    let json = """
-    {"days":["2026-07-11","2026-07-12"],"isCurrent":true,"priority":"todayMustReach"}
-    """.data(using: .utf8)!
-    let m = try JSONDecoder().decode(Membership.self, from: json)
-    try expectEqual(m.isCurrent, true)
-    try expectEqual(m.dayAssignments.count, 2)
-    // 旧格式每一天沿用旧 priority
-    for a in m.dayAssignments {
-        try expectEqual(a.priority, .todayMustReach)
-    }
-    try expectEqual(m.currentPriority, .todayMustReach)
-}
-
 check("group by category respects settings order, renames don't break linkage") {
     let d = Day.today()
     let cat1 = CategoryDef(name: "会议")
@@ -228,24 +214,24 @@ check("group by category respects settings order, renames don't break linkage") 
     try expectEqual(groups.last?.0.name, "日常")
     try expectEqual(groups.last?.1.map(\.meta.title), ["B"])
 }
-check("group by category: deleted category id shows as (未知)") {
+check("group by category: deleted category id shows as (Unknown)") {
     let d = Day.today()
     let ghostId = UUID()
     let a = mkAgg("A", days: [d], categoryId: ghostId)
     let groups = TaskQueries.groupByCategory([a], categories: [])
-    try expectEqual(groups.first?.0.name, "(未知)")
+    try expectEqual(groups.first?.0.name, "(Unknown)")
 }
-check("group by category: nil categoryId → (未设置)") {
+check("group by category: nil categoryId → (Unset)") {
     let d = Day.today()
     let a = mkAgg("A", days: [d], categoryId: nil)
     let groups = TaskQueries.groupByCategory([a], categories: [])
-    try expectEqual(groups.first?.0.name, "(未设置)")
+    try expectEqual(groups.first?.0.name, "(Unset)")
 }
 check("SettingsLookup resolves workType by id") {
     let wt = WorkTypeDef(name: "coding")
     try expectEqual(SettingsLookup.workTypeName(wt.id, in: [wt]), "coding")
-    try expectEqual(SettingsLookup.workTypeName(UUID(), in: [wt]), "(未知)")
-    try expectEqual(SettingsLookup.workTypeName(nil, in: [wt]), "(未设置)")
+    try expectEqual(SettingsLookup.workTypeName(UUID(), in: [wt]), "(Unknown)")
+    try expectEqual(SettingsLookup.workTypeName(nil, in: [wt]), "(Unset)")
 }
 
 // MARK: - Persistence

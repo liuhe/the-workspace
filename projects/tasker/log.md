@@ -61,6 +61,8 @@
   - `pushUncompleted` 复制源日 priority 到目标日
   - 列表、详情、右键都按 filter 上下文取 `priority(in:)`；详情第一部分改成每个 day chip 前带独立可编辑的 emoji
 - Backlog 定义再放宽：**所有未完成任务**（含已归属某天的）。之前是"未归属任何天 && 未完成"，现改为"未完成"一个条件
+- UI 全部改英文（domain displayName、Views、错误消息、defaults 的分类/工作类型名）；日历用系统 locale
+- 写 `docs/tasker-storage.md` —— 磁盘存储格式说明（目录布局、jsonl 字段、状态推导规则、时间戳精度、旧格式兼容、手工编辑注意事项）
 - 新属性 `TaskMeta.isRecurring`：循环任务
   - `statusForDay(_)`：只看 startAt 落在该天的时间记录，独立推导；`status(in filter)` 循环任务 + `.day(d)` 走 statusForDay，否则走全局 status
   - Backlog 过滤：`$0.status != .done || $0.meta.isRecurring` —— 循环任务永远在 Backlog

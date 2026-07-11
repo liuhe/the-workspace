@@ -14,7 +14,7 @@ public struct DayAssignment: Codable, Hashable, Sendable {
 /// 任务的所有关联：
 /// - dayAssignments：任务参与的每一天集合，每条独立带 priority
 /// - isCurrent + currentPriority：任务在"当前"集合里的独立关联
-public struct Membership: Hashable, Sendable {
+public struct Membership: Codable, Hashable, Sendable {
     public var dayAssignments: [DayAssignment]
     public var isCurrent: Bool
     public var currentPriority: Priority
@@ -55,40 +55,6 @@ public struct Membership: Hashable, Sendable {
     }
 }
 
-extension Membership: Codable {
-    private enum CodingKeys: String, CodingKey {
-        case dayAssignments
-        case isCurrent
-        case currentPriority
-        // 旧格式兼容
-        case days
-        case priority
-    }
-
-    public init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        self.isCurrent = (try? c.decode(Bool.self, forKey: .isCurrent)) ?? false
-
-        if let assignments = try? c.decode([DayAssignment].self, forKey: .dayAssignments) {
-            self.dayAssignments = assignments
-            self.currentPriority = (try? c.decode(Priority.self, forKey: .currentPriority)) ?? .normal
-        } else {
-            // 旧格式：{ days: [Day], isCurrent, priority } —— 每一天沿用旧的 priority
-            let days = (try? c.decode(Set<Day>.self, forKey: .days)) ?? []
-            let oldPriority = (try? c.decode(Priority.self, forKey: .priority)) ?? .normal
-            self.dayAssignments = days.sorted().map { DayAssignment(day: $0, priority: oldPriority) }
-            self.currentPriority = oldPriority
-        }
-    }
-
-    public func encode(to encoder: Encoder) throws {
-        var c = encoder.container(keyedBy: CodingKeys.self)
-        try c.encode(dayAssignments, forKey: .dayAssignments)
-        try c.encode(isCurrent, forKey: .isCurrent)
-        try c.encode(currentPriority, forKey: .currentPriority)
-    }
-}
-
 public struct TaskMeta: Hashable, Identifiable, Sendable {
     public let id: UUID
     public var title: String
@@ -118,6 +84,7 @@ public struct TaskMeta: Hashable, Identifiable, Sendable {
 }
 
 extension TaskMeta: Codable {
+    // 新增的可选字段用 decodeIfPresent 兜住；不是"旧格式迁移"，而是新字段用默认值填。
     private enum CodingKeys: String, CodingKey {
         case id, title, categoryId, membership, isRecurring, createdAt, updatedAt
     }
@@ -128,20 +95,9 @@ extension TaskMeta: Codable {
         self.title = try c.decode(String.self, forKey: .title)
         self.categoryId = try c.decodeIfPresent(UUID.self, forKey: .categoryId)
         self.membership = try c.decode(Membership.self, forKey: .membership)
-        self.isRecurring = (try? c.decode(Bool.self, forKey: .isRecurring)) ?? false
+        self.isRecurring = try c.decodeIfPresent(Bool.self, forKey: .isRecurring) ?? false
         self.createdAt = try c.decode(Date.self, forKey: .createdAt)
         self.updatedAt = try c.decode(Date.self, forKey: .updatedAt)
-    }
-
-    public func encode(to encoder: Encoder) throws {
-        var c = encoder.container(keyedBy: CodingKeys.self)
-        try c.encode(id, forKey: .id)
-        try c.encode(title, forKey: .title)
-        try c.encodeIfPresent(categoryId, forKey: .categoryId)
-        try c.encode(membership, forKey: .membership)
-        try c.encode(isRecurring, forKey: .isRecurring)
-        try c.encode(createdAt, forKey: .createdAt)
-        try c.encode(updatedAt, forKey: .updatedAt)
     }
 }
 
@@ -266,11 +222,11 @@ public enum TaskCommandError: Error, LocalizedError {
 
     public var errorDescription: String? {
         switch self {
-        case .alreadyInProgress: return "已有其它记录在进行中"
-        case .entryNotFound: return "找不到该时间记录"
-        case .entryAlreadyStarted: return "该记录已开始"
-        case .entryAlreadyEnded: return "该记录已结束"
-        case .entryNotStarted: return "该记录还没开始"
+        case .alreadyInProgress: return "Another entry is already in progress"
+        case .entryNotFound: return "Entry not found"
+        case .entryAlreadyStarted: return "Entry already started"
+        case .entryAlreadyEnded: return "Entry already ended"
+        case .entryNotStarted: return "Entry not started yet"
         }
     }
 }

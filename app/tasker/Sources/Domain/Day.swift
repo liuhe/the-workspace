@@ -27,7 +27,7 @@ public struct Day: Codable, Hashable, Sendable, Comparable, CustomStringConverti
     }
 
     /// "周X"（中文短星期）。默认用 zh-CN locale。
-    public func weekdayLabel(locale: Locale = Locale(identifier: "zh_CN"),
+    public func weekdayLabel(locale: Locale = .current,
                              calendar: Calendar = .current) -> String {
         let f = DateFormatter()
         f.calendar = calendar
@@ -36,7 +36,7 @@ public struct Day: Codable, Hashable, Sendable, Comparable, CustomStringConverti
         return f.string(from: date(calendar: calendar))
     }
 
-    /// "yyyy-MM-dd 周X"
+    /// "yyyy-MM-dd EEE"
     public var descriptionWithWeekday: String {
         "\(description) \(weekdayLabel())"
     }

@@ -7,9 +7,9 @@ public enum Priority: String, Codable, CaseIterable, Sendable, Comparable {
 
     public var displayName: String {
         switch self {
-        case .todayMustReach: return "今天必达"
-        case .important: return "重要"
-        case .normal: return "正常"
+        case .todayMustReach: return "Must reach today"
+        case .important: return "Important"
+        case .normal: return "Normal"
         }
     }
 

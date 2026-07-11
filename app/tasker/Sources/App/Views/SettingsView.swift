@@ -18,27 +18,27 @@ struct SettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("设置").font(.title2)
+            Text("Settings").font(.title2)
 
             DataRootSection()
 
             HStack(alignment: .top, spacing: 20) {
-                ListEditor(title: "工作分类", items: $categories)
+                ListEditor(title: "Categories", items: $categories)
                     .frame(width: 260, height: 340)
-                ListEditor(title: "工作类型", items: $workTypes)
+                ListEditor(title: "Work types", items: $workTypes)
                     .frame(width: 260, height: 340)
             }
-            Text("修改名字不会断开与任务的关联（内部按 ID 引用）。")
+            Text("Renaming keeps existing task linkage (internal id-based reference).")
                 .font(.caption).foregroundStyle(.secondary)
 
             HStack {
-                Button("恢复默认") {
+                Button("Restore defaults") {
                     categories = AppSettings.defaults.categories.map { EditableDef(id: $0.id, name: $0.name) }
                     workTypes = AppSettings.defaults.workTypes.map { EditableDef(id: $0.id, name: $0.name) }
                 }
                 Spacer()
-                Button("取消") { isPresented = false }
-                Button("保存") { save() }
+                Button("Cancel") { isPresented = false }
+                Button("Save") { save() }
                     .buttonStyle(.borderedProminent)
             }
         }
@@ -68,7 +68,7 @@ private struct DataRootSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("数据目录").font(.headline)
+            Text("Data directory").font(.headline)
             HStack {
                 Text(store.dataRoot.path)
                     .font(.system(.body, design: .monospaced))
@@ -76,9 +76,9 @@ private struct DataRootSection: View {
                     .truncationMode(.middle)
                     .textSelection(.enabled)
                 Spacer()
-                Button("更改…") { chooseDirectory() }
+                Button("Change…") { chooseDirectory() }
             }
-            Text("修改后会立即切换：读盘、设置、任务、时间记录都从新目录加载。")
+            Text("Switches immediately: settings, tasks, and entries all load from the new location.")
                 .font(.caption).foregroundStyle(.secondary)
         }
     }
@@ -90,7 +90,7 @@ private struct DataRootSection: View {
         panel.canCreateDirectories = true
         panel.allowsMultipleSelection = false
         panel.directoryURL = store.dataRoot
-        panel.prompt = "选择数据目录"
+        panel.prompt = "Choose data directory"
         if panel.runModal() == .OK, let url = panel.url {
             store.setDataRoot(url)
         }
@@ -142,7 +142,7 @@ private struct ListEditor: View {
 
                 Spacer()
 
-                TextField("新条目", text: $newItem)
+                TextField("New item", text: $newItem)
                     .textFieldStyle(.roundedBorder)
                     .frame(maxWidth: 100)
                     .onSubmit(addItem)

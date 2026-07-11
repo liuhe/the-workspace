@@ -33,19 +33,19 @@ public struct AppSettings: Codable, Sendable, Hashable {
 
     public static let defaults = AppSettings(
         categories: [
-            CategoryDef(name: "日常跟进"),
-            CategoryDef(name: "会议"),
-            CategoryDef(name: "我的任务"),
+            CategoryDef(name: "Daily follow-up"),
+            CategoryDef(name: "Meeting"),
+            CategoryDef(name: "My task"),
             CategoryDef(name: "Platform/Chaos test"),
-            CategoryDef(name: "其他"),
+            CategoryDef(name: "Other"),
         ],
         workTypes: [
-            WorkTypeDef(name: "未指定"),
-            WorkTypeDef(name: "编码"),
-            WorkTypeDef(name: "阅读"),
-            WorkTypeDef(name: "沟通"),
-            WorkTypeDef(name: "会议"),
-            WorkTypeDef(name: "文档"),
+            WorkTypeDef(name: "Unspecified"),
+            WorkTypeDef(name: "Coding"),
+            WorkTypeDef(name: "Reading"),
+            WorkTypeDef(name: "Communication"),
+            WorkTypeDef(name: "Meeting"),
+            WorkTypeDef(name: "Docs"),
         ]
     )
 }
@@ -53,15 +53,15 @@ public struct AppSettings: Codable, Sendable, Hashable {
 extension TimeEntry.Marker {
     public var displayName: String {
         switch self {
-        case .done: return "完成"
-        case .restart: return "开始新阶段"
+        case .done: return "Done"
+        case .restart: return "New phase"
         }
     }
 }
 
 public enum SettingsLookup {
-    public static let unknownName = "(未知)"
-    public static let unsetName = "(未设置)"
+    public static let unknownName = "(Unknown)"
+    public static let unsetName = "(Unset)"
 
     public static func categoryName(_ id: UUID?, in categories: [CategoryDef]) -> String {
         guard let id else { return unsetName }

@@ -14,7 +14,7 @@ struct SidebarView: View {
                 FilterMenu(showingDayPicker: $showingDayPickerForFilter,
                            pushingFromDay: $pushingFromDay)
                 Spacer()
-                Toggle("当前", isOn: $store.showCurrent)
+                Toggle("Current", isOn: $store.showCurrent)
                     .toggleStyle(.switch)
                     .controlSize(.small)
             }
@@ -26,7 +26,7 @@ struct SidebarView: View {
                 Button {
                     showingNewTaskSheet = true
                 } label: {
-                    Label("新任务", systemImage: "plus")
+                    Label("New task", systemImage: "plus")
                 }
                 .keyboardShortcut("n", modifiers: [.command])
                 Spacer()
@@ -95,14 +95,14 @@ private struct PushToDaySheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("把 \(sourceDay.descriptionWithWeekday) 的未完成任务（\(uncompletedCount) 项）推到另一天")
+            Text("Push \(uncompletedCount) uncompleted task\(uncompletedCount == 1 ? "" : "s") from \(sourceDay.descriptionWithWeekday) to another day")
                 .font(.headline)
             MiniCalendarView(selectedDate: $date, daysWithTasks: store.daysWithTasks)
                 .frame(width: 320)
             HStack {
                 Spacer()
-                Button("取消", action: onCancel)
-                Button("推过去") {
+                Button("Cancel", action: onCancel)
+                Button("Push") {
                     onPick(Day(date: date))
                 }
                 .buttonStyle(.borderedProminent)
@@ -122,15 +122,15 @@ private struct FilterMenu: View {
 
     var body: some View {
         Menu {
-            dayShortcut("今天", day: Day.today())
-            dayShortcut("昨天", day: dayOffset(-1))
-            dayShortcut("明天", day: dayOffset(1))
-            Button("选择日期…") { showingDayPicker = true }
+            dayShortcut("Today", day: Day.today())
+            dayShortcut("Yesterday", day: dayOffset(-1))
+            dayShortcut("Tomorrow", day: dayOffset(1))
+            Button("Choose date…") { showingDayPicker = true }
             Divider()
             Button("Backlog") { store.dayFilter = .backlog }
             if case .day(let d) = store.dayFilter {
                 Divider()
-                Button("把未完成推到别一天…") { pushingFromDay = d }
+                Button("Push uncompleted to another day…") { pushingFromDay = d }
             }
         } label: {
             HStack {
@@ -146,9 +146,9 @@ private struct FilterMenu: View {
         switch store.dayFilter {
         case .backlog: return "Backlog"
         case .day(let d):
-            if d == Day.today() { return "今天 \(d.weekdayLabel())" }
-            if d == dayOffset(-1) { return "昨天 \(d.weekdayLabel())" }
-            if d == dayOffset(1) { return "明天 \(d.weekdayLabel())" }
+            if d == Day.today() { return "Today \(d.weekdayLabel())" }
+            if d == dayOffset(-1) { return "Yesterday \(d.weekdayLabel())" }
+            if d == dayOffset(1) { return "Tomorrow \(d.weekdayLabel())" }
             return d.descriptionWithWeekday
         }
     }
@@ -176,15 +176,15 @@ private struct NewTaskSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("新任务").font(.headline)
-            TextField("标题", text: $title)
+            Text("New task").font(.headline)
+            TextField("Title", text: $title)
                 .textFieldStyle(.roundedBorder)
                 .focused($focused)
                 .onSubmit(create)
             HStack {
                 Spacer()
-                Button("取消") { isPresented = false }
-                Button("创建", action: create)
+                Button("Cancel") { isPresented = false }
+                Button("Create", action: create)
                     .buttonStyle(.borderedProminent)
                     .disabled(title.trimmingCharacters(in: .whitespaces).isEmpty)
             }
@@ -220,13 +220,13 @@ struct DayPickerSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("选日期").font(.headline)
+            Text("Choose date").font(.headline)
             MiniCalendarView(selectedDate: $date, daysWithTasks: daysWithTasks)
                 .frame(width: 320)
             HStack {
                 Spacer()
-                Button("取消") { isPresented = false }
-                Button("选定") {
+                Button("Cancel") { isPresented = false }
+                Button("Select") {
                     onPick(Day(date: date))
                     isPresented = false
                 }
@@ -304,21 +304,21 @@ private struct TaskContextMenu: View {
     let onPickDay: () -> Void
 
     var body: some View {
-        Menu("添加到") {
-            Button("今天") { store.addToDay(id: aggregate.id, day: Day.today()) }
-            Button("明天") {
+        Menu("Add to") {
+            Button("Today") { store.addToDay(id: aggregate.id, day: Day.today()) }
+            Button("Tomorrow") {
                 let d = Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()
                 store.addToDay(id: aggregate.id, day: Day(date: d))
             }
-            Button("选日期…") { onPickDay() }
+            Button("Choose date…") { onPickDay() }
         }
         if case .day(let currentDay) = store.dayFilter,
            aggregate.meta.membership.days.contains(currentDay) {
-            Button("从 \(currentDay.description) 移除") {
+            Button("Remove from \(currentDay.description)") {
                 store.removeFromDay(id: aggregate.id, day: currentDay)
             }
         }
-        Menu("优先级") {
+        Menu("Priority") {
             ForEach(Priority.allCases, id: \.self) { p in
                 Button {
                     store.setPriorityInFilterContext(id: aggregate.id, priority: p)
@@ -332,14 +332,14 @@ private struct TaskContextMenu: View {
                 }
             }
         }
-        Button(aggregate.meta.membership.isCurrent ? "从当前移除" : "加入当前") {
+        Button(aggregate.meta.membership.isCurrent ? "Remove from Current" : "Add to Current") {
             store.setIsCurrent(id: aggregate.id, isCurrent: !aggregate.meta.membership.isCurrent)
         }
         Divider()
         Button(role: .destructive) {
             store.deleteTask(id: aggregate.id)
         } label: {
-            Label("删除", systemImage: "trash")
+            Label("Delete", systemImage: "trash")
         }
     }
 }
@@ -357,7 +357,7 @@ private struct TaskRow: View {
                 .lineLimit(1)
             Spacer()
             if aggregate.meta.isRecurring {
-                Text("循环")
+                Text("Recurring")
                     .font(.caption2)
                     .padding(.horizontal, 5).padding(.vertical, 1)
                     .background(Color.purple.opacity(0.15))
@@ -365,7 +365,7 @@ private struct TaskRow: View {
                     .clipShape(Capsule())
             }
             if aggregate.meta.membership.isCurrent {
-                Text("当前")
+                Text("Current")
                     .font(.caption2)
                     .padding(.horizontal, 5).padding(.vertical, 1)
                     .background(Color.accentColor.opacity(0.15))
@@ -377,7 +377,7 @@ private struct TaskRow: View {
     }
 
     private var displayTitle: String {
-        let t = aggregate.meta.title.isEmpty ? "(无标题)" : aggregate.meta.title
+        let t = aggregate.meta.title.isEmpty ? "(Untitled)" : aggregate.meta.title
         return "\(aggregate.priority(in: store.dayFilter).titlePrefix)\(t)"
     }
 }

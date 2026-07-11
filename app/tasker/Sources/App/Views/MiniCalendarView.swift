@@ -15,8 +15,8 @@ struct MiniCalendarView: View {
 
     private var calendar: Calendar {
         var cal = Calendar(identifier: .gregorian)
-        cal.firstWeekday = 2  // 周一为一周首日
-        cal.locale = Locale(identifier: "zh_CN")
+        cal.firstWeekday = 2  // Monday
+        cal.locale = .current
         return cal
     }
 
@@ -54,18 +54,28 @@ struct MiniCalendarView: View {
 
     private var monthTitle: String {
         let f = DateFormatter()
-        f.locale = Locale(identifier: "zh_CN")
-        f.dateFormat = "yyyy 年 M 月"
+        f.locale = .current
+        f.setLocalizedDateFormatFromTemplate("yMMMM")
         return f.string(from: monthAnchor)
     }
 
+    /// 用系统 locale 的短星期名（Mon/Tue…；日本、中文等也有对应短名）
     private var weekdayHeader: some View {
         HStack {
-            ForEach(["一", "二", "三", "四", "五", "六", "日"], id: \.self) { d in
+            ForEach(orderedShortWeekdays, id: \.self) { d in
                 Text(d).font(.caption).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity)
             }
         }
+    }
+
+    private var orderedShortWeekdays: [String] {
+        let f = DateFormatter()
+        f.locale = calendar.locale
+        // shortStandaloneWeekdaySymbols 一般是 Sun 开头
+        let symbols = f.shortStandaloneWeekdaySymbols ?? ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+        let offset = calendar.firstWeekday - 1
+        return Array(symbols[offset...] + symbols[..<offset])
     }
 
     // MARK: - Grid

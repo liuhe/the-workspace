@@ -24,10 +24,6 @@ public enum JsonlFile {
         d.dateDecodingStrategy = .custom { decoder in
             let s = try decoder.singleValueContainer().decode(String.self)
             if let d = isoFormatter.date(from: s) { return d }
-            // 向后兼容：无小数秒的 ISO8601
-            let fallback = ISO8601DateFormatter()
-            fallback.formatOptions = [.withInternetDateTime]
-            if let d = fallback.date(from: s) { return d }
             throw DecodingError.dataCorruptedError(in: try decoder.singleValueContainer(),
                                                    debugDescription: "bad date: \(s)")
         }

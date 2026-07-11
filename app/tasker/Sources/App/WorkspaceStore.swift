@@ -57,7 +57,7 @@ final class WorkspaceStore: ObservableObject {
             reload()
             reloadSettings()
         } catch {
-            lastError = "切换数据目录失败：\(error.localizedDescription)"
+            lastError = "Failed to change data root: \(error.localizedDescription)"
         }
     }
 
@@ -108,7 +108,7 @@ final class WorkspaceStore: ObservableObject {
                 currentDescription = ""
             }
         } catch {
-            lastError = "读盘失败：\(error.localizedDescription)"
+            lastError = "Load failed: \(error.localizedDescription)"
         }
     }
 
@@ -131,7 +131,7 @@ final class WorkspaceStore: ObservableObject {
             selectedTaskId = agg.id
             currentDescription = ""
         } catch {
-            lastError = "创建失败：\(error.localizedDescription)"
+            lastError = "Create failed: \(error.localizedDescription)"
         }
     }
 
@@ -141,7 +141,7 @@ final class WorkspaceStore: ObservableObject {
             tasks.removeAll { $0.id == id }
             if selectedTaskId == id { selectedTaskId = nil; currentDescription = "" }
         } catch {
-            lastError = "删除失败：\(error.localizedDescription)"
+            lastError = "Delete failed: \(error.localizedDescription)"
         }
     }
 
@@ -267,7 +267,7 @@ final class WorkspaceStore: ObservableObject {
 
     func reloadSettings() {
         do { settings = try settingsRepo.load() }
-        catch { lastError = "读取设置失败：\(error.localizedDescription)" }
+        catch { lastError = "Load settings failed: \(error.localizedDescription)" }
     }
 
     func updateSettings(_ new: AppSettings) {
@@ -275,7 +275,7 @@ final class WorkspaceStore: ObservableObject {
             try settingsRepo.save(new)
             settings = new
         } catch {
-            lastError = "保存设置失败：\(error.localizedDescription)"
+            lastError = "Save settings failed: \(error.localizedDescription)"
         }
     }
 
@@ -286,7 +286,7 @@ final class WorkspaceStore: ObservableObject {
             currentDescription = try repo.loadDescription(taskId: id)
         } catch {
             currentDescription = ""
-            lastError = "读取描述失败：\(error.localizedDescription)"
+            lastError = "Load description failed: \(error.localizedDescription)"
         }
     }
 
@@ -294,7 +294,7 @@ final class WorkspaceStore: ObservableObject {
         guard let id = selectedTaskId else { return }
         do {
             try repo.saveDescription(taskId: id, markdown: currentDescription)
-        } catch { lastError = "保存描述失败：\(error.localizedDescription)" }
+        } catch { lastError = "Save description failed: \(error.localizedDescription)" }
     }
 
     // MARK: - private
@@ -304,7 +304,7 @@ final class WorkspaceStore: ObservableObject {
             try repo.save(&agg)
             tasks[idx] = agg
         } catch {
-            lastError = "保存失败：\(error.localizedDescription)"
+            lastError = "Save failed: \(error.localizedDescription)"
         }
     }
 

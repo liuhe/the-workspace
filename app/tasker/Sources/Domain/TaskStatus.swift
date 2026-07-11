@@ -7,9 +7,9 @@ public enum TaskStatus: String, Sendable, Codable {
 
     public var displayName: String {
         switch self {
-        case .notStarted: return "未开始"
-        case .inProgress: return "进行中"
-        case .done: return "完成"
+        case .notStarted: return "Not started"
+        case .inProgress: return "In progress"
+        case .done: return "Done"
         }
     }
 }

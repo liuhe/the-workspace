@@ -12,7 +12,7 @@ struct TaskerApp: App {
         do {
             store = try WorkspaceStore(root: WorkspaceStore.loadDataRoot())
         } catch {
-            fatalError("初始化仓储失败：\(error)")
+            fatalError("Failed to initialize repository: \(error)")
         }
         _store = StateObject(wrappedValue: store)
     }

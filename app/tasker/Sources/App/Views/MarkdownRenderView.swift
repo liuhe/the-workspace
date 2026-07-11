@@ -9,7 +9,7 @@ struct MarkdownRenderView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 8) {
                 if source.isEmpty {
-                    Text("(空)").foregroundStyle(.tertiary).italic()
+                    Text("(empty)").foregroundStyle(.tertiary).italic()
                 } else {
                     ForEach(Array(parseBlocks(source).enumerated()), id: \.offset) { _, block in
                         renderBlock(block)
