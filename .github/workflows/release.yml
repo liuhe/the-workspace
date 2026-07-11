@@ -1,0 +1,87 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g. 0.1.0). Only used for manual dispatch.'
+        required: true
+        default: '0.0.0'
+
+jobs:
+  release:
+    runs-on: macos-14
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version
+        id: version
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Show Swift version
+        run: swift --version
+
+      - name: Build universal binary
+        working-directory: app/tasker
+        run: swift build -c release --arch arm64 --arch x86_64
+
+      - name: Verify architectures
+        working-directory: app/tasker
+        run: |
+          BIN_DIR="$(swift build --show-bin-path -c release --arch arm64 --arch x86_64)"
+          BIN="$BIN_DIR/tasker"
+          echo "Binary: $BIN"
+          lipo -info "$BIN"
+          lipo -verify_arch "$BIN" arm64
+          lipo -verify_arch "$BIN" x86_64
+
+      - name: Generate AppIcon.icns
+        run: bash scripts/make-icon.sh
+
+      - name: Package .app bundle
+        run: bash scripts/make-app-bundle.sh "${{ steps.version.outputs.version }}"
+
+      - name: Zip bundle
+        working-directory: dist
+        run: zip -yr "tasker-${{ steps.version.outputs.version }}.zip" tasker.app
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: github.ref_type == 'tag'
+        with:
+          files: dist/tasker-${{ steps.version.outputs.version }}.zip
+          generate_release_notes: true
+          body: |
+            Universal binary (arm64 + x86_64) — one download works on both Apple Silicon and Intel Macs.
+
+            ## Install
+
+            1. Download `tasker-${{ steps.version.outputs.version }}.zip` and unzip.
+            2. Move `tasker.app` to `/Applications`.
+            3. **First launch (unsigned app)**: right-click the app → **Open** → confirm. macOS remembers your choice.
+
+            If that fails (some macOS versions), run once in Terminal:
+            ```
+            xattr -d com.apple.quarantine /Applications/tasker.app
+            ```
+
+            ## Data location
+
+            Tasks are stored in `~/Documents/tasker/` by default; you can change this in the app's Settings.
+
+      - name: Upload artifact (manual runs)
+        if: github.ref_type != 'tag'
+        uses: actions/upload-artifact@v4
+        with:
+          name: tasker-${{ steps.version.outputs.version }}
+          path: dist/tasker-${{ steps.version.outputs.version }}.zip

@@ -7,5 +7,10 @@ docs/modeling/viewer/
 Package.resolved
 *.xcodeproj
 
+# Release artifacts (regenerated per build)
+dist/
+app/tasker/AppIcon.icns
+AppIcon.iconset/
+
 # macOS
 .DS_Store

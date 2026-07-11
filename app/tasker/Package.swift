@@ -14,15 +14,24 @@ let package = Package(
             dependencies: ["TaskerDomain"],
             path: "Sources/Persistence"
         ),
+        .target(
+            name: "TaskerIcon",
+            path: "Sources/TaskerIcon"
+        ),
         .executableTarget(
             name: "tasker",
-            dependencies: ["TaskerDomain", "TaskerPersistence"],
+            dependencies: ["TaskerDomain", "TaskerPersistence", "TaskerIcon"],
             path: "Sources/App"
         ),
         .executableTarget(
             name: "taskerCheck",
             dependencies: ["TaskerDomain", "TaskerPersistence"],
             path: "Sources/Check"
+        ),
+        .executableTarget(
+            name: "iconGen",
+            dependencies: ["TaskerIcon"],
+            path: "Sources/IconGen"
         ),
     ]
 )
