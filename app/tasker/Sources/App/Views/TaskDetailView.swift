@@ -24,56 +24,14 @@ struct TaskDetailView: View {
 private struct MembershipBar: View {
     @EnvironmentObject var store: WorkspaceStore
     let aggregate: TaskAggregate
-    @State private var showingDayPicker = false
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
-            HStack(spacing: 4) {
-                Text("Days").font(.caption).foregroundStyle(.secondary)
-                ForEach(sortedAssignments, id: \.day) { a in
-                    DayChip(assignment: a, taskId: aggregate.id)
-                }
-                Button {
-                    showingDayPicker = true
-                } label: {
-                    Image(systemName: "plus.circle")
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
-            }
-
+            daysDropdown
             Spacer()
-
-            // 当前 toggle + 当前优先级（当前开着时才显示）
-            HStack(spacing: 6) {
-                Toggle(isOn: Binding(
-                    get: { aggregate.meta.membership.isCurrent },
-                    set: { store.setIsCurrent(id: aggregate.id, isCurrent: $0) }
-                )) {
-                    Text("Current")
-                }
-                .toggleStyle(.switch)
-                .controlSize(.small)
-
-                if aggregate.meta.membership.isCurrent {
-                    Picker("", selection: Binding(
-                        get: { aggregate.meta.membership.currentPriority },
-                        set: { p in store.setCurrentPriority(id: aggregate.id, priority: p) }
-                    )) {
-                        ForEach(Priority.allCases, id: \.self) { p in
-                            Text("\(p.titlePrefix)\(p.displayName)").tag(p)
-                        }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.menu)
-                    .fixedSize()
-                }
-            }
-        }
-        .sheet(isPresented: $showingDayPicker) {
-            DayPickerSheet(isPresented: $showingDayPicker,
-                           daysWithTasks: store.daysWithTasks) { day in
-                store.addToDay(id: aggregate.id, day: day)
+            if let controlDay = filterDay {
+                priorityPicker(for: controlDay)
+                currentToggle(for: controlDay)
             }
         }
     }
@@ -81,48 +39,81 @@ private struct MembershipBar: View {
     private var sortedAssignments: [DayAssignment] {
         aggregate.meta.membership.dayAssignments.sorted { $0.day < $1.day }
     }
-}
 
-/// 每个 chip 展示 day + 独立可编辑的 priority。
-private struct DayChip: View {
-    @EnvironmentObject var store: WorkspaceStore
-    let assignment: DayAssignment
-    let taskId: UUID
+    /// 右侧控件永远针对当前 filter 的日期；filter 是 Backlog 或任务不在那天 → 隐藏
+    private var filterDay: Day? {
+        if case .day(let d) = store.dayFilter,
+           aggregate.meta.membership.days.contains(d) {
+            return d
+        }
+        return nil
+    }
 
-    var body: some View {
-        HStack(spacing: 4) {
-            // 优先级 emoji 前缀（点击可改）
-            Menu {
-                ForEach(Priority.allCases, id: \.self) { p in
-                    Button {
-                        store.setPriority(id: taskId, inDay: assignment.day, priority: p)
-                    } label: {
+    // MARK: - 关联日期只读下拉
+
+    private var daysDropdown: some View {
+        Menu {
+            if sortedAssignments.isEmpty {
+                Text("(none)")
+            } else {
+                ForEach(sortedAssignments, id: \.day) { a in
+                    // 只读：Button no-op；标记 filter 的当天为 selected
+                    Button {} label: {
                         HStack {
-                            Text("\(p.titlePrefix)\(p.displayName)")
-                            if p == assignment.priority { Image(systemName: "checkmark") }
+                            Text(dayListItem(a))
+                            if a.day == filterDay {
+                                Image(systemName: "checkmark")
+                            }
                         }
                     }
                 }
-            } label: {
-                Text(assignment.priority.emoji.isEmpty ? "•" : assignment.priority.emoji)
-                    .font(.caption)
             }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
-
-            Text(assignment.day.descriptionWithWeekday).font(.caption)
-
-            Button {
-                store.removeFromDay(id: taskId, day: assignment.day)
-            } label: {
-                Image(systemName: "xmark.circle.fill").font(.caption)
+        } label: {
+            HStack(spacing: 4) {
+                Text("Days").font(.caption).foregroundStyle(.secondary)
+                Text("(\(sortedAssignments.count))").font(.caption)
+                Image(systemName: "chevron.down").font(.caption2)
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
         }
-        .padding(.horizontal, 6).padding(.vertical, 2)
-        .background(Color.gray.opacity(0.15))
-        .clipShape(Capsule())
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+    }
+
+    private func dayListItem(_ a: DayAssignment) -> String {
+        var parts = [a.day.descriptionWithWeekday]
+        if !a.priority.emoji.isEmpty { parts.append(a.priority.emoji) }
+        if a.isCurrent { parts.append("⚡") }
+        return parts.joined(separator: " ")
+    }
+
+    // MARK: - 编辑控件（作用于 selectedDay）
+
+    private func priorityPicker(for day: Day) -> some View {
+        HStack(spacing: 4) {
+            Text("Priority").font(.caption).foregroundStyle(.secondary)
+            Picker("", selection: Binding<Priority>(
+                get: { aggregate.meta.membership.priority(inDay: day) ?? .normal },
+                set: { p in store.setPriority(id: aggregate.id, inDay: day, priority: p) }
+            )) {
+                ForEach(Priority.allCases, id: \.self) { p in
+                    Text("\(p.titlePrefix)\(p.displayName)").tag(p)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .fixedSize()
+        }
+    }
+
+    private func currentToggle(for day: Day) -> some View {
+        Toggle(isOn: Binding(
+            get: { aggregate.meta.membership.isCurrent(inDay: day) },
+            set: { v in store.setIsCurrent(id: aggregate.id, inDay: day, isCurrent: v) }
+        )) {
+            Text("Current")
+        }
+        .toggleStyle(.switch)
+        .controlSize(.small)
     }
 }
 

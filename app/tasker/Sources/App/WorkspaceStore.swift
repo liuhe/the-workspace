@@ -119,10 +119,9 @@ final class WorkspaceStore: ObservableObject {
         guard !trimmed.isEmpty else { return }
         var meta = TaskMeta(title: trimmed, categoryId: nil)
         if case .day(let d) = dayFilter {
-            meta.membership.upsertDay(d)   // priority=normal by default
-        }
-        if showCurrent {
-            meta.membership.isCurrent = true
+            meta.membership.dayAssignments.append(
+                DayAssignment(day: d, priority: .normal, isCurrent: showCurrent)
+            )
         }
         var agg = TaskAggregate(meta: meta)
         do {
@@ -158,22 +157,10 @@ final class WorkspaceStore: ObservableObject {
         updateMeta(id: id) { $0.membership.setPriority(inDay: day, priority: priority) }
     }
 
-    /// 改"当前"关联的优先级
-    func setCurrentPriority(id: UUID, priority: Priority) {
-        updateMeta(id: id) { $0.membership.currentPriority = priority }
-    }
-
-    /// 在当前 filter 上下文改优先级；filter=.day(d) → 改那天；filter=.backlog → 若在当前，改 currentPriority
+    /// 在当前 filter 上下文改优先级；只在 .day(d) 有意义；.backlog 视图无优先级概念，忽略
     func setPriorityInFilterContext(id: UUID, priority: Priority) {
-        switch dayFilter {
-        case .day(let d):
+        if case .day(let d) = dayFilter {
             setPriority(id: id, inDay: d, priority: priority)
-        case .backlog:
-            updateMeta(id: id) { meta in
-                if meta.membership.isCurrent {
-                    meta.membership.currentPriority = priority
-                }
-            }
         }
     }
 
@@ -189,8 +176,9 @@ final class WorkspaceStore: ObservableObject {
         updateMeta(id: id) { $0.membership.dayAssignments.removeAll() }
     }
 
-    func setIsCurrent(id: UUID, isCurrent: Bool) {
-        updateMeta(id: id) { $0.membership.isCurrent = isCurrent }
+    /// 在某天关联上打/去 current 标
+    func setIsCurrent(id: UUID, inDay day: Day, isCurrent: Bool) {
+        updateMeta(id: id) { $0.membership.setIsCurrent(inDay: day, isCurrent: isCurrent) }
     }
 
     func setIsRecurring(id: UUID, isRecurring: Bool) {

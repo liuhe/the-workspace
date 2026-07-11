@@ -18,7 +18,15 @@ public enum TaskQueries {
             filtered = tasks.filter { $0.status != .done || $0.meta.isRecurring }
         }
         if currentOnly {
-            filtered = filtered.filter { $0.meta.membership.isCurrent }
+            // isCurrent 是 DayAssignment 的属性：
+            // - .day(d) 视图：那天的 assignment.isCurrent == true
+            // - .backlog 视图：任何一天的 assignment.isCurrent == true
+            switch filter {
+            case .day(let d):
+                filtered = filtered.filter { $0.meta.membership.isCurrent(inDay: d) }
+            case .backlog:
+                filtered = filtered.filter { $0.meta.membership.hasAnyCurrent }
+            }
         }
         return sortForDisplay(filtered, in: filter)
     }

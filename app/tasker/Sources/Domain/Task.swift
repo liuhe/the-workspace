@@ -1,43 +1,53 @@
 import Foundation
 
-/// 任务与"某天集合"的关联；priority 是这条关联的属性，不同天独立。
-public struct DayAssignment: Codable, Hashable, Sendable {
+/// 任务与"某天集合"的关联；priority 和 isCurrent 都是这条关联的属性，不同天独立。
+public struct DayAssignment: Hashable, Sendable {
     public var day: Day
     public var priority: Priority
+    /// 该任务在这一天是否被标记为"当前"
+    public var isCurrent: Bool
 
-    public init(day: Day, priority: Priority = .normal) {
+    public init(day: Day, priority: Priority = .normal, isCurrent: Bool = false) {
         self.day = day
         self.priority = priority
+        self.isCurrent = isCurrent
     }
 }
 
-/// 任务的所有关联：
-/// - dayAssignments：任务参与的每一天集合，每条独立带 priority
-/// - isCurrent + currentPriority：任务在"当前"集合里的独立关联
+extension DayAssignment: Codable {
+    // isCurrent 是新字段；老数据缺失时默认 false
+    private enum CodingKeys: String, CodingKey { case day, priority, isCurrent }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.day = try c.decode(Day.self, forKey: .day)
+        self.priority = try c.decode(Priority.self, forKey: .priority)
+        self.isCurrent = try c.decodeIfPresent(Bool.self, forKey: .isCurrent) ?? false
+    }
+}
+
 public struct Membership: Codable, Hashable, Sendable {
     public var dayAssignments: [DayAssignment]
-    public var isCurrent: Bool
-    public var currentPriority: Priority
 
-    public init(dayAssignments: [DayAssignment] = [],
-                isCurrent: Bool = false,
-                currentPriority: Priority = .normal) {
+    public init(dayAssignments: [DayAssignment] = []) {
         self.dayAssignments = dayAssignments
-        self.isCurrent = isCurrent
-        self.currentPriority = currentPriority
     }
 
     public var days: Set<Day> { Set(dayAssignments.map(\.day)) }
-    public var isInAnyCollection: Bool { !dayAssignments.isEmpty || isCurrent }
+    public var isInAnyCollection: Bool { !dayAssignments.isEmpty }
+
+    /// 任何一天被标记为"当前"，则任务"被视作在当前集合里"
+    public var hasAnyCurrent: Bool { dayAssignments.contains(where: { $0.isCurrent }) }
 
     public func priority(inDay day: Day) -> Priority? {
         dayAssignments.first(where: { $0.day == day })?.priority
     }
 
+    public func isCurrent(inDay day: Day) -> Bool {
+        dayAssignments.first(where: { $0.day == day })?.isCurrent ?? false
+    }
+
     public mutating func upsertDay(_ day: Day, priority: Priority = .normal) {
-        if let idx = dayAssignments.firstIndex(where: { $0.day == day }) {
-            dayAssignments[idx].priority = priority
-        } else {
+        if !dayAssignments.contains(where: { $0.day == day }) {
             dayAssignments.append(DayAssignment(day: day, priority: priority))
         }
     }
@@ -50,10 +60,17 @@ public struct Membership: Codable, Hashable, Sendable {
         }
     }
 
+    public mutating func setIsCurrent(inDay day: Day, isCurrent: Bool) {
+        if let idx = dayAssignments.firstIndex(where: { $0.day == day }) {
+            dayAssignments[idx].isCurrent = isCurrent
+        }
+    }
+
     public mutating func removeDay(_ day: Day) {
         dayAssignments.removeAll { $0.day == day }
     }
 }
+
 
 public struct TaskMeta: Hashable, Identifiable, Sendable {
     public let id: UUID
@@ -140,7 +157,8 @@ public struct TaskAggregate: Identifiable, Sendable, Hashable {
         case .day(let d):
             return meta.membership.priority(inDay: d) ?? .normal
         case .backlog:
-            return meta.membership.isCurrent ? meta.membership.currentPriority : .normal
+            // Backlog 视图不区分优先级；同优先级按 updatedAt 排
+            return .normal
         }
     }
 

@@ -98,14 +98,13 @@ func mkAgg(_ title: String,
            days: Set<Day> = [],
            isCurrent: Bool = false,
            categoryId: UUID? = nil,
-           priorityPerDay: Priority = .normal,
-           currentPriority: Priority = .normal) -> TaskAggregate {
-    let assignments = days.sorted().map { DayAssignment(day: $0, priority: priorityPerDay) }
+           priorityPerDay: Priority = .normal) -> TaskAggregate {
+    let assignments = days.sorted().map {
+        DayAssignment(day: $0, priority: priorityPerDay, isCurrent: isCurrent)
+    }
     return TaskAggregate(
         meta: TaskMeta(title: title, categoryId: categoryId,
-                       membership: Membership(dayAssignments: assignments,
-                                              isCurrent: isCurrent,
-                                              currentPriority: currentPriority)),
+                       membership: Membership(dayAssignments: assignments)),
         entries: []
     )
 }

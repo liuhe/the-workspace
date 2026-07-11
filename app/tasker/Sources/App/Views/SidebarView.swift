@@ -332,8 +332,13 @@ private struct TaskContextMenu: View {
                 }
             }
         }
-        Button(aggregate.meta.membership.isCurrent ? "Remove from Current" : "Add to Current") {
-            store.setIsCurrent(id: aggregate.id, isCurrent: !aggregate.meta.membership.isCurrent)
+        // "Current" 是 day-relation 上的属性；只在 filter 是某天时可切换
+        if case .day(let d) = store.dayFilter,
+           aggregate.meta.membership.days.contains(d) {
+            let cur = aggregate.meta.membership.isCurrent(inDay: d)
+            Button(cur ? "Unmark current for \(d.description)" : "Mark current for \(d.description)") {
+                store.setIsCurrent(id: aggregate.id, inDay: d, isCurrent: !cur)
+            }
         }
         Divider()
         Button(role: .destructive) {
@@ -364,7 +369,7 @@ private struct TaskRow: View {
                     .foregroundStyle(Color.purple)
                     .clipShape(Capsule())
             }
-            if aggregate.meta.membership.isCurrent {
+            if isCurrentInContext {
                 Text("Current")
                     .font(.caption2)
                     .padding(.horizontal, 5).padding(.vertical, 1)
@@ -379,6 +384,13 @@ private struct TaskRow: View {
     private var displayTitle: String {
         let t = aggregate.meta.title.isEmpty ? "(Untitled)" : aggregate.meta.title
         return "\(aggregate.priority(in: store.dayFilter).titlePrefix)\(t)"
+    }
+
+    private var isCurrentInContext: Bool {
+        switch store.dayFilter {
+        case .day(let d): return aggregate.meta.membership.isCurrent(inDay: d)
+        case .backlog: return aggregate.meta.membership.hasAnyCurrent
+        }
     }
 }
 

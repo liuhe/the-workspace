@@ -50,11 +50,9 @@ tasker 的数据全部落在本地磁盘上。默认根目录 `~/Documents/taske
   "categoryId": "3114879A-BA37-4149-88B2-AC018909E035",
   "membership": {
     "dayAssignments": [
-      { "day": "2026-07-11", "priority": "todayMustReach" },
-      { "day": "2026-07-12", "priority": "important" }
-    ],
-    "isCurrent": true,
-    "currentPriority": "important"
+      { "day": "2026-07-11", "priority": "todayMustReach", "isCurrent": true },
+      { "day": "2026-07-12", "priority": "important", "isCurrent": false }
+    ]
   },
   "isRecurring": false,
   "createdAt": "2026-07-11T10:30:00.123Z",
@@ -69,7 +67,7 @@ tasker 的数据全部落在本地磁盘上。默认根目录 `~/Documents/taske
 | `id` | UUID | 任务唯一标识 |
 | `title` | String | 标题 |
 | `categoryId` | UUID? | 引用 `settings.categories[].id`；`null`/缺失 = 未设置 |
-| `membership` | object | 任务与集合的关联（见下） |
+| `membership` | object | 任务与日期集合的关联（见下） |
 | `isRecurring` | Bool | 循环任务：完成状态按天独立，且始终出现在 Backlog |
 | `createdAt` | ISO8601 (ms) | 创建时间 |
 | `updatedAt` | ISO8601 (ms) | 最近一次修改时间 |
@@ -78,13 +76,12 @@ tasker 的数据全部落在本地磁盘上。默认根目录 `~/Documents/taske
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
-| `dayAssignments` | Array | 任务在哪几天的集合里，每条独立带 priority |
+| `dayAssignments` | Array | 任务在哪几天的集合里 |
 | `dayAssignments[].day` | String `yyyy-MM-dd` | 集合日期 |
 | `dayAssignments[].priority` | String | `todayMustReach` / `important` / `normal` |
-| `isCurrent` | Bool | 是否在"当前"集合里（与日期正交） |
-| `currentPriority` | String | 在"当前"集合里的独立 priority |
+| `dayAssignments[].isCurrent` | Bool | 该任务在这一天是否被标记为"当前" |
 
-**要点**：优先级是"关联属性"，不是任务全局属性。同一任务在 07-11 可以是"必达"，在 07-12 可以是"普通"，改一天不影响另一天。
+**要点**：优先级和"当前"标都是**关联属性**（task↔day 关系上），不是任务全局属性。同一任务在 07-11 可以是"必达 + 当前"，在 07-12 可以是"普通、非当前"，改一天不影响另一天。任务的"是否 current"从各天关联汇总（任一天为 current 即视为在当前集合里）。
 
 ## `entries.jsonl`
 
