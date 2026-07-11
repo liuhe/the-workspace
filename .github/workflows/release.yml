@@ -57,8 +57,8 @@ jobs:
           mkdir -p .build/universal
           lipo -create "$ARM64_BIN" "$X86_BIN" -output .build/universal/tasker
           lipo -info .build/universal/tasker
-          lipo -verify_arch .build/universal/tasker arm64
-          lipo -verify_arch .build/universal/tasker x86_64
+          # -verify_arch 语法：file 在前，arch 是 -verify_arch 的参数
+          lipo .build/universal/tasker -verify_arch arm64 x86_64
 
       - name: Generate AppIcon.icns
         run: bash scripts/make-icon.sh
