@@ -310,7 +310,7 @@ final class WorkspaceStore: ObservableObject {
 
     private func startPolling() {
         pollTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
-            Task { @MainActor in
+            Task { @MainActor [weak self] in
                 guard let self else { return }
                 if self.repo.hasExternalChanges() {
                     self.reload()
