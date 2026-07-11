@@ -1,21 +1,19 @@
 #!/bin/bash
-# Package the release-built universal binary into a minimal tasker.app bundle.
-# Assumes:
-#   - swift build -c release --arch arm64 --arch x86_64 has run in app/tasker
-#   - scripts/make-icon.sh has produced app/tasker/AppIcon.icns (optional)
-# Usage: bash scripts/make-app-bundle.sh <version>
+# Package the release-built binary into a minimal tasker.app bundle.
+# Usage: bash scripts/make-app-bundle.sh <version> [binary-path]
+#
+# If binary-path is omitted, defaults to app/tasker/.build/universal/tasker.
+# Requires scripts/make-icon.sh to have produced app/tasker/AppIcon.icns
+# (icon is optional but recommended).
 set -euo pipefail
 
 VERSION="${1:-0.0.0}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APP_ROOT="$ROOT/app/tasker"
 
-cd "$APP_ROOT"
-BIN_DIR="$(swift build --show-bin-path -c release --arch arm64 --arch x86_64)"
-BIN="$BIN_DIR/tasker"
+BIN="${2:-$APP_ROOT/.build/universal/tasker}"
 if [ ! -x "$BIN" ]; then
-    echo "Universal binary not found at $BIN" >&2
-    echo "Run: swift build -c release --arch arm64 --arch x86_64 first." >&2
+    echo "Binary not found at $BIN" >&2
     exit 1
 fi
 
