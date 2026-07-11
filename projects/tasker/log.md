@@ -1,0 +1,69 @@
+# tasker log
+
+## 2026-07-11 决策
+
+- 项目名：tasker
+- 平台：macOS Native（默认 Swift + SwiftUI）
+- 建模：跳过 DCDDP 4 视图建模，直接开搞
+- Backlog 定义：未归属当天集合且未完成的任务
+- 状态推导规则确认（见 overview.md）
+
+## 2026-07-11
+
+- 建 `projects/tasker/`，写 overview / tasks / log
+- 环境探查：Swift 6.2 有，Xcode 无（只有 CLT）→ 走 SwiftPM 可执行 target + SwiftUI，`swift run` 启动，不做 `.app` bundle
+- 存储目录约定：`~/Documents/tasker/` = `tasks.jsonl` + `entries.jsonl` + `descriptions/<uuid>.md`
+- Backlog 精确定义：`!isInCurrent && collectionDate == nil && status != .done`（等实际用起来若不对再改）
+- 领域层 + 仓储 + UI 一次落地，共 15 个源文件；用 `taskerCheck` 可执行 target 替代 `swift test`（CLT 无法链接 XCTest / Testing）
+- 端到端场景全绿；踩坑：ISO8601 秒精度导致同秒记录顺序丢失、状态推导选错 last entry → 改为带 fractional seconds
+- app 从 `$(swift build --show-bin-path)/tasker` 启动可正常运行，storage 目录自动初始化
+- 模型重构：`WorkType`/标题下沉到 `TimeEntry`；引入 `Membership`（单一，`kind = .day(Day) | .current`），`Priority` 移到 Membership 上；`Task` 只留 title/category/description
+- 决策：一个任务同一时刻只能属于一个集合（`.day` 或 `.current` 或 nil=Backlog）——通过合并成单个 `Membership` 实现
+- UI 改：侧栏改下拉菜单（今天/昨天/明天/选日期/当前/Backlog）；新建任务弹标题输入 sheet；列表右键 → 优先级 + 归属 + 删除；详情标题+优先级最上，时间记录可编辑开始/结束/标题/类型/标志
+- 数据格式变化，旧数据不迁移，直接清空 `~/Documents/tasker/` 重来
+- 侧栏结构调整：下拉只放"日期 + Backlog"；"当前"改成独立开关（`showCurrent`），打开时下拉禁用、effective filter = .current
+- 日期标签统一带星期显示（zh-CN locale，`Day.descriptionWithWeekday` → `2026-07-11 周六`）
+- 详情页重构成 3 段：关联行（日期/优先级/当前 一行）→ 任务标题+分类+描述 → 时间记录列表
+- 领域模型再改：`Membership` 从 `kind` 枚举回归到 `{ day: Day?, isCurrent: Bool, priority: Priority }` 三字段，日期和当前**可同时存在**、独立编辑
+- TimeEntry 语义变化：`startAt` 变可选（nil = 已建但未开始）；工作流从"开始即建"改成"先建后开始"
+- 新命令：`addEntry` / `startEntry(id)` / `endEntry(id)`；`marker` 与 `startEntry` 解耦（marker 由用户单独设，restart 场景保留自动填 marker）
+- Backlog 定义相应更新：`!membership.isInAnyCollection && status != .done`
+- 又一轮改动：
+  - 状态搬到第二部分标题前（不再是关联属性）
+  - 优先级加 emoji（❗️/🔶/无）；列表标题前缀 emoji、去次行、按分类分组
+  - 时间记录加 workType 显示编辑、时间只显示 HH:mm、时间随时可编辑
+  - `Membership.day: Day?` → `days: Set<Day>`（任务可属多日期）
+  - "当前" 改成正交 filter：`showCurrent` 独立于日期，可与日期/backlog 组合过滤
+  - Backlog 定义再改：`days.isEmpty && status != .done`（isCurrent 与 Backlog 判定完全解耦）
+  - 右键从"归属"改成"添加到 / 从 X 移除"
+  - 自制 `MiniCalendarView`：月历带任务小点，用于选日期
+- 又一轮：
+  - 时间记录追加到末尾（去掉 view 里的 `.reversed()`）
+  - `WorkCategory` 从 enum 改成 name-based struct；`AppSettings` 保存分类和工作类型两个可编辑清单，独立 `settings.json`
+  - 设置界面 `SettingsView`（gear 图标打开）：分类/类型双列表增删移
+  - Marker 显示名："再开始" → "开始新阶段"（enum case 名保持 `.restart` 不动）
+  - 描述改成 双栏：源码 TextEditor 左，`MarkdownRenderView` 右实时渲染（headings/列表/引用/代码块/inline markdown）；纯 SwiftUI 单栏 WYSIWYG 成本高，先做双栏
+- 再一轮：
+  - 分类和工作类型都改成 `{id, name}` 稳定 UUID 的对象（`CategoryDef` / `WorkTypeDef`）；任务用 `categoryId`，TimeEntry 用 `workTypeId`；改名不掉关联
+  - `TaskQueries.groupByCategory` 支持"改名保留"、"删除→(未知)"、"nil→(未设置)"三种展示
+  - 状态推导规则改成"最后一个有标记录"权威：无 marker 的 entry 不改变已有 done 状态，但空任务里出现任何 entry 就算进行中
+  - Markdown preview 之前用 HStack 布局被 TextEditor 抢空间挤没了；改成 `HSplitView`（用户可拖分隔线）
+- 再改 markdown preview：`AttributedString(markdown:)` 在 macOS 上默认 `.full` 解析会用 `presentationIntent` 属性，而 SwiftUI 的 `Text(AttributedString)` **不渲染**这些块级属性 —— 所以 preview 看起来跟源码一样。改用 `Text(LocalizedStringKey(raw))` —— SwiftUI 内建 markdown 支持，`**bold**`/`*italic*`/`` `code` ``/链接都能识别；再叠加自定义的块级解析器（heading/list/quote/code）；layout 从 `HSplitView` 换回 HStack 显式 50/50 保稳
+- 侧栏下拉的今天/昨天/明天条目：`daysWithTasks` 命中时后缀加 ● 提示
+- markdown preview 用户误以为没生效 —— 实际是他输入了 `** sdf **`（星号内外有空格），按 CommonMark 规范不算粗体；解释后确认预览生效
+- 时间记录行：工作类型 Picker 移到标题前
+- 切换 filter 到空列表时自动清空选中和详情（`store.pruneSelectionIfOffscreen()` + ContentView `.onChange`）
+- 侧栏下拉底部（当 filter 是 .day 时）加 "把未完成推到别一天…" —— `pushUncompleted(from:to:)` 把源日下 status ≠ done 的任务的 `days` 补上目标日
+- 目录重构：`projects/tasker/app/` → `app/tasker/`；`projects/tasker/` 只留 overview/tasks/log；新增顶级 `app/` 目录写入 `knowledge-structure.md`
+- 设置里加"数据目录"配置：`UserDefaults` 存路径（key = `tasker.dataRoot`，独立于数据目录本身），运行时 `WorkspaceStore.setDataRoot(url)` 热重绑 repo；未配置时默认仍是 `~/Documents/tasker/`
+- Bug 修：优先级是"任务-每天关联"的独立属性，不是全局。之前 `Membership.priority` 一份共享导致 A 天改优先级 B 天跟着变
+  - 模型改：`dayAssignments: [DayAssignment{day, priority}]` + `currentPriority`；Codable 保留旧格式兼容
+  - `pushUncompleted` 复制源日 priority 到目标日
+  - 列表、详情、右键都按 filter 上下文取 `priority(in:)`；详情第一部分改成每个 day chip 前带独立可编辑的 emoji
+- Backlog 定义再放宽：**所有未完成任务**（含已归属某天的）。之前是"未归属任何天 && 未完成"，现改为"未完成"一个条件
+- 新属性 `TaskMeta.isRecurring`：循环任务
+  - `statusForDay(_)`：只看 startAt 落在该天的时间记录，独立推导；`status(in filter)` 循环任务 + `.day(d)` 走 statusForDay，否则走全局 status
+  - Backlog 过滤：`$0.status != .done || $0.meta.isRecurring` —— 循环任务永远在 Backlog
+  - `pushUncompleted`：循环任务用 `statusForDay(sourceDay)` 判定；已在源日完成的循环任务不推
+  - 详情第一部分加"循环" toggle；状态徽章 + 侧栏行状态点都改用 `status(in: dayFilter)`；徽章旁标"循环"胶囊
+  - 存储向前兼容：无 `isRecurring` 字段的旧任务默认 false

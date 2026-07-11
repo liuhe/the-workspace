@@ -1,0 +1,11 @@
+.claude_global
+.claude/settings.local.json
+docs/modeling/viewer/
+
+# Swift build artifacts
+.build/
+Package.resolved
+*.xcodeproj
+
+# macOS
+.DS_Store
