@@ -62,6 +62,9 @@ struct SidebarView: View {
                 pushingFromDay = nil
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .newTaskRequested)) { _ in
+            showingNewTaskSheet = true
+        }
     }
 }
 

@@ -3,6 +3,11 @@ import AppKit
 import TaskerPersistence
 import TaskerIcon
 
+extension Notification.Name {
+    /// 全局 Cmd+N：由 App CommandGroup 发出，SidebarView 监听
+    static let newTaskRequested = Notification.Name("tasker.newTaskRequested")
+}
+
 @main
 struct TaskerApp: App {
     @StateObject private var store: WorkspaceStore
@@ -24,7 +29,16 @@ struct TaskerApp: App {
                 .environmentObject(store)
                 .frame(minWidth: 900, minHeight: 560)
         }
-        // 新任务快捷键在 SidebarView 的按钮上；这里不再重复注册。
+        .commands {
+            // 全局 Cmd+N：SidebarView 里的按钮 shortcut 依赖响应链，WKWebView
+            // 抢焦点时会失效；这里挂 App 级 CommandGroup 保稳
+            CommandGroup(after: .newItem) {
+                Button("New Task") {
+                    NotificationCenter.default.post(name: .newTaskRequested, object: nil)
+                }
+                .keyboardShortcut("n", modifiers: [.command])
+            }
+        }
     }
 }
 

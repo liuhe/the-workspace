@@ -134,6 +134,21 @@ struct MarkdownWebEditor: NSViewRepresentable {
             return n;
           }
 
+          function findPopupButton(popup, labels) {
+            var btns = popup.querySelectorAll('button');
+            for (var i = 0; i < btns.length; i++) {
+              var t = (btns[i].textContent || '').trim().toLowerCase();
+              var a = (btns[i].getAttribute('aria-label') || '').trim().toLowerCase();
+              for (var j = 0; j < labels.length; j++) {
+                if (t === labels[j] || t.indexOf(labels[j]) !== -1 ||
+                    a === labels[j] || a.indexOf(labels[j]) !== -1) {
+                  return btns[i];
+                }
+              }
+            }
+            return null;
+          }
+
           // Cmd+K：链接编辑框
           document.addEventListener('keydown', function (e) {
             if (!(e.metaKey && (e.key === 'k' || e.key === 'K'))) return;
@@ -153,12 +168,12 @@ struct MarkdownWebEditor: NSViewRepresentable {
             }
             btn.click();
 
-            if (anchor) {
-              // 弹框出现后，把 URL 输入框预填成当前链接的 URL（还原 HTML 实体）
-              setTimeout(function () {
-                var popup = document.querySelector('.toastui-editor-popup');
-                if (!popup) return;
-                var inputs = popup.querySelectorAll('input[type="text"]');
+            setTimeout(function () {
+              var popup = document.querySelector('.toastui-editor-popup');
+              if (!popup) return;
+              var inputs = popup.querySelectorAll('input[type="text"]');
+
+              if (anchor) {
                 if (inputs[0]) {
                   inputs[0].value = decodeEntities(anchor.getAttribute('href') || anchor.href || '');
                   inputs[0].dispatchEvent(new Event('input', { bubbles: true }));
@@ -167,9 +182,32 @@ struct MarkdownWebEditor: NSViewRepresentable {
                   inputs[1].value = anchor.textContent || '';
                   inputs[1].dispatchEvent(new Event('input', { bubbles: true }));
                 }
-                if (inputs[0]) inputs[0].focus();
-              }, 60);
-            }
+              }
+
+              // 焦点自动到 URL 输入框
+              if (inputs[0]) inputs[0].focus();
+
+              // Enter → 确认；Esc → 取消
+              popup.addEventListener('keydown', function (e2) {
+                if (e2.key === 'Enter') {
+                  e2.preventDefault();
+                  e2.stopPropagation();
+                  var ok = findPopupButton(popup, ['ok', 'confirm', 'add link', 'add', 'insert']);
+                  if (ok) ok.click();
+                } else if (e2.key === 'Escape') {
+                  e2.preventDefault();
+                  e2.stopPropagation();
+                  var cancel = findPopupButton(popup, ['cancel', 'close']);
+                  if (cancel) {
+                    cancel.click();
+                  } else {
+                    popup.style.display = 'none';
+                  }
+                  // 关掉弹框后，把焦点还给编辑器
+                  try { editor.focus(); } catch (err) {}
+                }
+              }, true);
+            }, 60);
           }, true);
 
           // 输入规则：`*`/`-`/`+` + 空格 → 无序列表
