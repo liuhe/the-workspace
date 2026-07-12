@@ -111,6 +111,96 @@ struct MarkdownWebEditor: NSViewRepresentable {
             window.webkit.messageHandlers.editor.postMessage({ type: 'openLink', url: url });
           }, true);
 
+          function getAnchorAtCursor() {
+            var sel = window.getSelection();
+            if (!sel.rangeCount) return null;
+            var node = sel.anchorNode;
+            while (node && node !== document.body) {
+              if (node.nodeType === Node.ELEMENT_NODE && node.tagName === 'A') return node;
+              node = node.parentNode;
+            }
+            return null;
+          }
+
+          function isBlockEl(el) {
+            return el && el.nodeType === Node.ELEMENT_NODE &&
+                   /^(P|LI|DIV|H[1-6]|BLOCKQUOTE)$/.test(el.tagName);
+          }
+
+          function currentBlock(range) {
+            var n = range.startContainer;
+            if (n.nodeType !== Node.ELEMENT_NODE) n = n.parentNode;
+            while (n && !isBlockEl(n)) n = n.parentNode;
+            return n;
+          }
+
+          // Cmd+K：链接编辑框
+          document.addEventListener('keydown', function (e) {
+            if (!(e.metaKey && (e.key === 'k' || e.key === 'K'))) return;
+            e.preventDefault();
+            e.stopPropagation();
+            var anchor = getAnchorAtCursor();
+            var btn = document.querySelector('.toastui-editor-toolbar-icons.link');
+            if (!btn) return;
+
+            if (anchor) {
+              // 先把整条链接文本作为当前选中，Toast UI 的 addLink 会拿它作为 linkText
+              var r = document.createRange();
+              r.selectNodeContents(anchor);
+              var sel = window.getSelection();
+              sel.removeAllRanges();
+              sel.addRange(r);
+            }
+            btn.click();
+
+            if (anchor) {
+              // 弹框出现后，把 URL 输入框预填成当前链接的 URL
+              setTimeout(function () {
+                var popup = document.querySelector('.toastui-editor-popup');
+                if (!popup) return;
+                var inputs = popup.querySelectorAll('input[type="text"]');
+                if (inputs[0]) {
+                  inputs[0].value = anchor.getAttribute('href') || anchor.href || '';
+                  inputs[0].dispatchEvent(new Event('input', { bubbles: true }));
+                }
+                if (inputs[1]) {
+                  inputs[1].value = anchor.textContent || '';
+                  inputs[1].dispatchEvent(new Event('input', { bubbles: true }));
+                }
+                if (inputs[0]) inputs[0].focus();
+              }, 60);
+            }
+          }, true);
+
+          // 输入规则：`*`/`-`/`+` + 空格 → 无序列表
+          // 直接操作 prosemirror view 的 state.tr.delete，用 $from.start(depth) 定位到当前
+          // block 内容起点，跨节点边界之类的位置歧义就没了
+          document.addEventListener('input', function (e) {
+            if (e.inputType !== 'insertText' || e.data !== ' ') return;
+            var sel = window.getSelection();
+            if (!sel.rangeCount || !sel.isCollapsed) return;
+            var block = currentBlock(sel.getRangeAt(0));
+            if (!block) return;
+            var text = block.textContent;
+            if (text !== '* ' && text !== '- ' && text !== '+ ') return;
+
+            try {
+              var wwEditor = editor.getCurrentModeEditor();
+              var view = wwEditor && wwEditor.view;
+              if (view) {
+                var state = view.state;
+                var $from = state.selection.$from;
+                // 当前 block 内容起点（不含开边界），到光标位置：把 "* " 精确覆盖
+                var blockStart = $from.start($from.depth);
+                var cursor = state.selection.from;
+                if (blockStart < cursor) {
+                  view.dispatch(state.tr.delete(blockStart, cursor));
+                }
+              }
+              editor.exec('bulletList');
+            } catch (err) {}
+          }, true);
+
           window.webkit.messageHandlers.editor.postMessage({ type: 'ready' });
         })();
         </script>
