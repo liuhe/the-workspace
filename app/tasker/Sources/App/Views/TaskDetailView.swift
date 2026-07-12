@@ -110,7 +110,7 @@ private struct MembershipBar: View {
             get: { aggregate.meta.membership.isCurrent(inDay: day) },
             set: { v in store.setIsCurrent(id: aggregate.id, inDay: day, isCurrent: v) }
         )) {
-            Text("Current")
+            Text("👀 Current")
         }
         .toggleStyle(.switch)
         .controlSize(.small)
@@ -139,7 +139,7 @@ private struct TaskInfoSection: View {
                     get: { aggregate.meta.isRecurring },
                     set: { store.setIsRecurring(id: aggregate.id, isRecurring: $0) }
                 )) {
-                    Text("Recurring")
+                    Text("🔁 Recurring")
                 }
                 .toggleStyle(.switch)
                 .controlSize(.small)
