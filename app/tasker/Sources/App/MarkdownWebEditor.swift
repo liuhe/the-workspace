@@ -154,13 +154,13 @@ struct MarkdownWebEditor: NSViewRepresentable {
             btn.click();
 
             if (anchor) {
-              // 弹框出现后，把 URL 输入框预填成当前链接的 URL
+              // 弹框出现后，把 URL 输入框预填成当前链接的 URL（还原 HTML 实体）
               setTimeout(function () {
                 var popup = document.querySelector('.toastui-editor-popup');
                 if (!popup) return;
                 var inputs = popup.querySelectorAll('input[type="text"]');
                 if (inputs[0]) {
-                  inputs[0].value = anchor.getAttribute('href') || anchor.href || '';
+                  inputs[0].value = decodeEntities(anchor.getAttribute('href') || anchor.href || '');
                   inputs[0].dispatchEvent(new Event('input', { bubbles: true }));
                 }
                 if (inputs[1]) {
