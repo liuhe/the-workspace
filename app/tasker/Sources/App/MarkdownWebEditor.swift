@@ -20,6 +20,7 @@ struct MarkdownWebEditor: NSViewRepresentable {
 
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.setValue(false, forKey: "drawsBackground")
+        webView.navigationDelegate = context.coordinator
         context.coordinator.webView = webView
 
         webView.loadHTMLString(Self.buildInlinedHTML(), baseURL: nil)
@@ -91,6 +92,16 @@ struct MarkdownWebEditor: NSViewRepresentable {
             editor.setMarkdown(md, false);
           };
 
+          // Cmd+click 链接 → 交给系统浏览器（不让 prosemirror 吃掉）
+          document.addEventListener('click', function (e) {
+            if (!e.metaKey) return;
+            var a = e.target && e.target.closest ? e.target.closest('a') : null;
+            if (!a || !a.href) return;
+            e.preventDefault();
+            e.stopPropagation();
+            window.webkit.messageHandlers.editor.postMessage({ type: 'openLink', url: a.href });
+          }, true);
+
           window.webkit.messageHandlers.editor.postMessage({ type: 'ready' });
         })();
         </script>
@@ -108,7 +119,7 @@ struct MarkdownWebEditor: NSViewRepresentable {
 
     // MARK: - Coordinator
 
-    final class Coordinator: NSObject, WKScriptMessageHandler {
+    final class Coordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         var parent: MarkdownWebEditor
         weak var webView: WKWebView?
         var ready = false
@@ -116,6 +127,22 @@ struct MarkdownWebEditor: NSViewRepresentable {
         var lastPushed = ""
 
         init(_ parent: MarkdownWebEditor) { self.parent = parent }
+
+        // 拦截所有导航：允许初始 about: 加载；其它 URL（http/https/file）交给系统浏览器
+        func webView(_ webView: WKWebView,
+                     decidePolicyFor navigationAction: WKNavigationAction,
+                     decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+            guard let url = navigationAction.request.url else {
+                decisionHandler(.allow)
+                return
+            }
+            if url.scheme == "about" {
+                decisionHandler(.allow)
+                return
+            }
+            NSWorkspace.shared.open(url)
+            decisionHandler(.cancel)
+        }
 
         func userContentController(_ userContentController: WKUserContentController,
                                    didReceive message: WKScriptMessage) {
@@ -131,6 +158,10 @@ struct MarkdownWebEditor: NSViewRepresentable {
                 if let md = dict["md"] as? String {
                     lastPushed = md
                     DispatchQueue.main.async { self.parent.markdown = md }
+                }
+            case "openLink":
+                if let s = dict["url"] as? String, let url = URL(string: s) {
+                    NSWorkspace.shared.open(url)
                 }
             default: break
             }
