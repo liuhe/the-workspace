@@ -169,25 +169,16 @@ private struct TaskInfoSection: View {
         .fixedSize()
     }
 
-    /// 描述编辑器：左源右实时 markdown 渲染；HStack 显式 50/50 分配保证两边都能看见。
+    /// WYSIWYG markdown 编辑器（WKWebView + Toast UI Editor），存储层仍是 markdown 文本
     private var descriptionEditor: some View {
-        HStack(spacing: 0) {
-            TextEditor(text: Binding(
-                get: { store.currentDescription },
-                set: { new in
-                    store.currentDescription = new
-                    scheduleSave()
-                }
-            ))
-            .font(.system(.body, design: .monospaced))
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .border(Color.secondary.opacity(0.2))
-
-            MarkdownRenderView(source: store.currentDescription)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color.gray.opacity(0.06))
-                .border(Color.secondary.opacity(0.2))
-        }
+        MarkdownWebEditor(markdown: Binding(
+            get: { store.currentDescription },
+            set: { new in
+                store.currentDescription = new
+                scheduleSave()
+            }
+        ))
+        .border(Color.secondary.opacity(0.2))
     }
 
     private var contextualStatus: TaskStatus { aggregate.status(in: store.dayFilter) }

@@ -21,7 +21,8 @@ let package = Package(
         .executableTarget(
             name: "tasker",
             dependencies: ["TaskerDomain", "TaskerPersistence", "TaskerIcon"],
-            path: "Sources/App"
+            path: "Sources/App",
+            resources: [.copy("Resources")]
         ),
         .executableTarget(
             name: "taskerCheck",
