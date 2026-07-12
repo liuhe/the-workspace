@@ -92,6 +92,14 @@ struct MarkdownWebEditor: NSViewRepresentable {
             editor.setMarkdown(md, false);
           };
 
+          // Toast UI 输出的 URL 里 & 被写成 &amp;（HTML 实体），做一次解码
+          function decodeEntities(s) {
+            if (!s) return s;
+            var t = document.createElement('textarea');
+            t.innerHTML = s;
+            return t.value;
+          }
+
           // Cmd+click 链接 → 交给系统浏览器（不让 prosemirror 吃掉）
           document.addEventListener('click', function (e) {
             if (!e.metaKey) return;
@@ -99,7 +107,8 @@ struct MarkdownWebEditor: NSViewRepresentable {
             if (!a || !a.href) return;
             e.preventDefault();
             e.stopPropagation();
-            window.webkit.messageHandlers.editor.postMessage({ type: 'openLink', url: a.href });
+            var url = decodeEntities(a.getAttribute('href') || a.href);
+            window.webkit.messageHandlers.editor.postMessage({ type: 'openLink', url: url });
           }, true);
 
           window.webkit.messageHandlers.editor.postMessage({ type: 'ready' });
@@ -140,8 +149,20 @@ struct MarkdownWebEditor: NSViewRepresentable {
                 decisionHandler(.allow)
                 return
             }
-            NSWorkspace.shared.open(url)
+            NSWorkspace.shared.open(decodedHTMLEntities(in: url))
             decisionHandler(.cancel)
+        }
+
+        /// 把 URL 里残留的 HTML 实体（&amp; / &lt; / &gt; / &quot; / &#39;）还原
+        private func decodedHTMLEntities(in url: URL) -> URL {
+            let s = url.absoluteString
+                .replacingOccurrences(of: "&amp;", with: "&")
+                .replacingOccurrences(of: "&lt;", with: "<")
+                .replacingOccurrences(of: "&gt;", with: ">")
+                .replacingOccurrences(of: "&quot;", with: "\"")
+                .replacingOccurrences(of: "&#39;", with: "'")
+                .replacingOccurrences(of: "&#x27;", with: "'")
+            return URL(string: s) ?? url
         }
 
         func userContentController(_ userContentController: WKUserContentController,
