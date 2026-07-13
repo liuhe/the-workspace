@@ -13,7 +13,7 @@ struct DayStat: Identifiable {
 
 struct TaskDayStat: Identifiable {
     let task: TaskAggregate
-    let entries: [TimeEntry]      // 落在这一天的、有 startAt+endAt 的记录
+    let entries: [TimeEntry]
     var id: UUID { task.id }
     var totalDuration: TimeInterval { entries.compactMap(\.duration).reduce(0, +) }
     var ranges: [(Date, Date)] {
@@ -25,7 +25,6 @@ struct TaskDayStat: Identifiable {
 }
 
 enum StatsBuilder {
-    /// 从所有任务里抽出"有 startAt 的时间记录"，按 (day, task) 汇总。
     static func build(from tasks: [TaskAggregate], calendar: Calendar = .current) -> [DayStat] {
         var byDay: [Day: [UUID: [TimeEntry]]] = [:]
         var taskById: [UUID: TaskAggregate] = [:]
@@ -48,7 +47,7 @@ enum StatsBuilder {
     }
 }
 
-// MARK: - 时长格式化
+// MARK: - 格式化
 
 enum StatsFormat {
     static func duration(_ s: TimeInterval) -> String {
@@ -64,9 +63,8 @@ enum StatsFormat {
     }
 }
 
-// MARK: - Gantt 条
+// MARK: - Gantt 条（0-24h 时间轴）
 
-/// 一条 0-24h 的时间轴，画出 ranges 里的各段。
 struct GanttBar: View {
     let day: Day
     let ranges: [(Date, Date)]
@@ -81,8 +79,7 @@ struct GanttBar: View {
                     .fill(Color.secondary.opacity(0.08))
                     .frame(height: height)
                 ForEach(0..<ranges.count, id: \.self) { i in
-                    let seg = ranges[i]
-                    let (x, sw) = geometry(for: seg, width: w)
+                    let (x, sw) = geometry(for: ranges[i], width: w)
                     RoundedRectangle(cornerRadius: 2)
                         .fill(color)
                         .frame(width: sw, height: height)
@@ -105,7 +102,7 @@ struct GanttBar: View {
     }
 }
 
-// MARK: - 视图
+// MARK: - 主视图
 
 struct StatsView: View {
     @EnvironmentObject var store: WorkspaceStore
@@ -128,50 +125,41 @@ struct StatsView: View {
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
-                        ForEach(days) { d in
-                            DayBlock(day: d)
-                        }
+                        ForEach(days) { DayBlock(day: $0) }
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 8)
                 }
             }
         }
-        .frame(minWidth: 720, minHeight: 520)
+        .frame(minWidth: 800, minHeight: 560)
     }
 
     private var days: [DayStat] { StatsBuilder.build(from: store.tasks) }
 }
 
-// MARK: - Day / Task / Entry 行
+// MARK: - 块（组合行 + 子行）
 
 private struct DayBlock: View {
     let day: DayStat
     @State private var expanded = true
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            DisclosureGroup(isExpanded: $expanded) {
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(day.tasks) { t in
-                        TaskBlock(dayContext: day.day, task: t)
-                    }
-                }
-                .padding(.leading, 20)
-                .padding(.top, 4)
-            } label: {
-                Row(
-                    label: day.day.descriptionWithWeekday,
-                    labelFont: .headline,
-                    day: day.day,
-                    ranges: day.ranges,
-                    color: Color.indigo,
-                    duration: day.totalDuration
-                )
-            }
-            Divider()
+        StatsRow(
+            indent: 0,
+            expandable: .binding($expanded, enabled: !day.tasks.isEmpty),
+            label: day.day.descriptionWithWeekday,
+            labelFont: .headline,
+            timeText: nil,
+            day: day.day,
+            ranges: day.ranges,
+            color: .indigo,
+            duration: day.totalDuration
+        )
+        if expanded {
+            ForEach(day.tasks) { TaskBlock(dayContext: day.day, task: $0) }
         }
-        .padding(.vertical, 4)
+        Divider().padding(.vertical, 4)
     }
 }
 
@@ -181,95 +169,119 @@ private struct TaskBlock: View {
     @State private var expanded = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            DisclosureGroup(isExpanded: $expanded) {
-                VStack(alignment: .leading, spacing: 2) {
-                    ForEach(task.entries, id: \.id) { e in
-                        EntryRow(dayContext: dayContext, entry: e)
-                    }
-                }
-                .padding(.leading, 20)
-                .padding(.top, 2)
-            } label: {
-                Row(
-                    label: task.task.meta.title.isEmpty ? "(Untitled)" : task.task.meta.title,
-                    labelFont: .body,
+        StatsRow(
+            indent: 24,
+            expandable: .binding($expanded, enabled: !task.entries.isEmpty),
+            label: task.task.meta.title.isEmpty ? "(Untitled)" : task.task.meta.title,
+            labelFont: .body,
+            timeText: nil,
+            day: dayContext,
+            ranges: task.ranges,
+            color: .teal,
+            duration: task.totalDuration
+        )
+        if expanded {
+            ForEach(task.entries, id: \.id) { e in
+                let range: [(Date, Date)] = (e.startAt.flatMap { s in e.endAt.map { (s, $0) } }).map { [$0] } ?? []
+                StatsRow(
+                    indent: 48,
+                    expandable: .none,
+                    label: e.title.isEmpty ? "(no title)" : e.title,
+                    labelFont: .callout,
+                    timeText: timeText(for: e),
                     day: dayContext,
-                    ranges: task.ranges,
-                    color: Color.teal,
-                    duration: task.totalDuration
+                    ranges: range,
+                    color: .blue,
+                    duration: e.duration ?? 0
                 )
             }
         }
-        .padding(.vertical, 2)
-    }
-}
-
-private struct EntryRow: View {
-    let dayContext: Day
-    let entry: TimeEntry
-
-    var body: some View {
-        let range: [(Date, Date)] = {
-            if let s = entry.startAt, let e = entry.endAt { return [(s, e)] }
-            return []
-        }()
-        Row(
-            label: displayLabel,
-            labelFont: .callout,
-            day: dayContext,
-            ranges: range,
-            color: Color.blue,
-            duration: entry.duration ?? 0,
-            timeText: timeText
-        )
     }
 
-    private var displayLabel: String {
-        entry.title.isEmpty ? "(no title)" : entry.title
-    }
-    private var timeText: String? {
-        guard let s = entry.startAt else { return nil }
-        if let e = entry.endAt {
-            return "\(StatsFormat.timeOnly(s)) – \(StatsFormat.timeOnly(e))"
-        }
+    private func timeText(for e: TimeEntry) -> String? {
+        guard let s = e.startAt else { return nil }
+        if let en = e.endAt { return "\(StatsFormat.timeOnly(s)) – \(StatsFormat.timeOnly(en))" }
         return StatsFormat.timeOnly(s)
     }
 }
 
-/// 通用一行：label | Gantt | duration
-private struct Row: View {
+// MARK: - 统一行布局：Label 列固定 240pt（chevron 和缩进都吃进这一列），
+//         timeText 固定 100pt（day/task 行传 nil 时留空占位），
+//         Gantt 用 maxWidth infinity 撑满剩余，Duration 固定 70pt。
+
+private struct StatsRow: View {
+    let indent: CGFloat
+    let expandable: Expandable
     let label: String
     let labelFont: Font
+    let timeText: String?
     let day: Day
     let ranges: [(Date, Date)]
     let color: Color
     let duration: TimeInterval
-    var timeText: String? = nil
+
+    enum Expandable {
+        case none
+        case binding(Binding<Bool>, enabled: Bool)
+    }
 
     var body: some View {
         HStack(spacing: 10) {
-            Text(label)
-                .font(labelFont)
-                .frame(width: 220, alignment: .leading)
-                .lineLimit(1)
-                .truncationMode(.tail)
-
-            if let t = timeText {
-                Text(t)
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 100, alignment: .leading)
-            }
-
+            labelCell.frame(width: 260, alignment: .leading)
+            timeCell.frame(width: 100, alignment: .leading)
             GanttBar(day: day, ranges: ranges, color: color)
                 .frame(maxWidth: .infinity)
-
             Text(StatsFormat.duration(duration))
                 .font(.system(.callout, design: .monospaced))
                 .foregroundStyle(.secondary)
                 .frame(width: 70, alignment: .trailing)
         }
-        .contentShape(Rectangle())
+        .padding(.vertical, 3)
+    }
+
+    @ViewBuilder
+    private var labelCell: some View {
+        HStack(spacing: 4) {
+            Spacer().frame(width: indent)
+            chevron
+            Text(label)
+                .font(labelFont)
+                .lineLimit(1)
+                .truncationMode(.tail)
+            Spacer(minLength: 0)
+        }
+    }
+
+    @ViewBuilder
+    private var chevron: some View {
+        switch expandable {
+        case .none:
+            Spacer().frame(width: 14)
+        case .binding(let bound, let enabled):
+            if enabled {
+                Button {
+                    bound.wrappedValue.toggle()
+                } label: {
+                    Image(systemName: bound.wrappedValue ? "chevron.down" : "chevron.right")
+                        .font(.caption2)
+                        .frame(width: 12, height: 12)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+            } else {
+                Spacer().frame(width: 14)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var timeCell: some View {
+        if let t = timeText {
+            Text(t)
+                .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(.secondary)
+        } else {
+            Color.clear
+        }
     }
 }
