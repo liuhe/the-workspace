@@ -6,6 +6,7 @@ struct SidebarView: View {
     @State private var showingNewTaskSheet = false
     @State private var showingDayPickerForFilter = false
     @State private var showingSettings = false
+    @State private var showingStats = false
     @State private var pushingFromDay: Day?
 
     var body: some View {
@@ -31,6 +32,9 @@ struct SidebarView: View {
                 .keyboardShortcut("n", modifiers: [.command])
                 Spacer()
                 Button {
+                    showingStats = true
+                } label: { Image(systemName: "chart.bar") }
+                Button {
                     showingSettings = true
                 } label: { Image(systemName: "gearshape") }
                 Button {
@@ -50,6 +54,9 @@ struct SidebarView: View {
         }
         .sheet(isPresented: $showingSettings) {
             SettingsView(isPresented: $showingSettings)
+        }
+        .sheet(isPresented: $showingStats) {
+            StatsView(isPresented: $showingStats)
         }
         .sheet(item: Binding(
             get: { pushingFromDay.map { DayWrap(day: $0) } },
