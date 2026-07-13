@@ -157,8 +157,9 @@ public struct TaskAggregate: Identifiable, Sendable, Hashable {
         case .day(let d):
             return meta.membership.priority(inDay: d) ?? .normal
         case .backlog:
-            // Backlog 视图不区分优先级；同优先级按 updatedAt 排
-            return .normal
+            // Backlog 视图：用最后一天关联的优先级作为前缀；没关联就 normal
+            let sorted = meta.membership.dayAssignments.sorted { $0.day < $1.day }
+            return sorted.last?.priority ?? .normal
         }
     }
 
