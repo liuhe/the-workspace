@@ -25,22 +25,39 @@ struct TaskDayStat: Identifiable {
 }
 
 enum StatsBuilder {
-    /// 按 (day, task) 汇总所有带 startAt 的时间记录；日期升序。
+    /// 按 (day, task) 汇总所有时间记录；日期升序。
+    /// - 有 startAt 的记录：按 startAt 归到那一天
+    /// - 没 startAt 的记录：归到该任务"最早的相关日"（membership.days ∪ 已有 startAt 的天，取最早）；
+    ///   都没有就归到今天，好让用户能在这里给它设时间
     static func build(from tasks: [TaskAggregate], calendar: Calendar = .current) -> [DayStat] {
         var byDay: [Day: [UUID: [TimeEntry]]] = [:]
         var taskById: [UUID: TaskAggregate] = [:]
         for t in tasks {
             taskById[t.id] = t
+            var unstarted: [TimeEntry] = []
             for e in t.entries {
-                guard let s = e.startAt else { continue }
-                let d = Day(date: s, calendar: calendar)
-                byDay[d, default: [:]][t.id, default: []].append(e)
+                if let s = e.startAt {
+                    let d = Day(date: s, calendar: calendar)
+                    byDay[d, default: [:]][t.id, default: []].append(e)
+                } else {
+                    unstarted.append(e)
+                }
+            }
+            if !unstarted.isEmpty {
+                var candidates: Set<Day> = t.meta.membership.days
+                for e in t.entries {
+                    if let sa = e.startAt {
+                        candidates.insert(Day(date: sa, calendar: calendar))
+                    }
+                }
+                let anchor = candidates.min() ?? Day.today(calendar: calendar)
+                byDay[anchor, default: [:]][t.id, default: []].append(contentsOf: unstarted)
             }
         }
-        return byDay.keys.sorted().map { day in    // 升序：旧 → 新
+        return byDay.keys.sorted().map { day in
             let bucket = byDay[day]!
             let stats: [TaskDayStat] = bucket.map { (tid, es) in
-                let sorted = es.sorted { ($0.startAt ?? .distantPast) < ($1.startAt ?? .distantPast) }
+                let sorted = es.sorted { ($0.startAt ?? .distantFuture) < ($1.startAt ?? .distantFuture) }
                 return TaskDayStat(task: taskById[tid]!, entries: sorted)
             }.sorted { $0.totalDuration > $1.totalDuration }
             return DayStat(day: day, tasks: stats)
@@ -209,7 +226,8 @@ private struct EntryRow: View {
             expandable: .none,
             label: entry.title.isEmpty ? "(no title)" : entry.title,
             labelFont: .callout,
-            timeCell: editing ? .editable(makeStartBinding(), makeEndBinding()) : .display(displayTimeText),
+            timeCell: editing ? .editable(startBinding(), endBinding(), startExists: entry.startAt != nil, endExists: entry.endAt != nil)
+                              : .display(displayTimeText),
             day: dayContext,
             ranges: range,
             color: .blue,
@@ -218,25 +236,36 @@ private struct EntryRow: View {
     }
 
     private var displayTimeText: String? {
-        guard let s = entry.startAt else { return nil }
-        if let e = entry.endAt { return "\(StatsFormat.timeOnly(s)) – \(StatsFormat.timeOnly(e))" }
-        return StatsFormat.timeOnly(s)
+        if let s = entry.startAt, let e = entry.endAt {
+            return "\(StatsFormat.timeOnly(s)) – \(StatsFormat.timeOnly(e))"
+        }
+        if let s = entry.startAt {
+            return "\(StatsFormat.timeOnly(s)) – …"
+        }
+        return "not started"
     }
 
-    private func makeStartBinding() -> Binding<Date>? {
-        guard entry.startAt != nil else { return nil }
-        return Binding<Date>(
-            get: { entry.startAt ?? Date() },
+    /// 默认 12:00 于 dayContext 那天，作为 DatePicker 的起点
+    private var defaultStart: Date {
+        let cal = Calendar.current
+        let dayStart = cal.startOfDay(for: dayContext.date(calendar: cal))
+        return dayStart.addingTimeInterval(12 * 3600)
+    }
+    private var defaultEnd: Date {
+        (entry.startAt ?? defaultStart).addingTimeInterval(3600)
+    }
+
+    private func startBinding() -> Binding<Date> {
+        Binding<Date>(
+            get: { entry.startAt ?? defaultStart },
             set: { new in
                 store.updateEntry(taskId: taskId, entryId: entry.id) { $0.startAt = new }
             }
         )
     }
-
-    private func makeEndBinding() -> Binding<Date>? {
-        guard entry.endAt != nil else { return nil }
-        return Binding<Date>(
-            get: { entry.endAt ?? Date() },
+    private func endBinding() -> Binding<Date> {
+        Binding<Date>(
+            get: { entry.endAt ?? defaultEnd },
             set: { new in
                 store.updateEntry(taskId: taskId, entryId: entry.id) { $0.endAt = new }
             }
@@ -266,7 +295,8 @@ private struct StatsRow: View {
     enum TimeCell {
         case none
         case display(String?)
-        case editable(Binding<Date>?, Binding<Date>?)
+        /// startExists/endExists 表示原值是否已设定；未设定时 UI 淡显示，暗示"点了才生效"
+        case editable(Binding<Date>, Binding<Date>, startExists: Bool, endExists: Bool)
     }
 
     var body: some View {
@@ -331,23 +361,17 @@ private struct StatsRow: View {
             } else {
                 Color.clear
             }
-        case .editable(let startBind, let endBind):
+        case .editable(let startBind, let endBind, let startExists, let endExists):
             HStack(spacing: 4) {
-                if let sb = startBind {
-                    DatePicker("", selection: sb, displayedComponents: [.hourAndMinute])
-                        .labelsHidden()
-                        .controlSize(.mini)
-                } else {
-                    Text("--:--").font(.caption2).foregroundStyle(.secondary)
-                }
+                DatePicker("", selection: startBind, displayedComponents: [.hourAndMinute])
+                    .labelsHidden()
+                    .controlSize(.mini)
+                    .opacity(startExists ? 1.0 : 0.45)
                 Text("→").font(.caption2).foregroundStyle(.secondary)
-                if let eb = endBind {
-                    DatePicker("", selection: eb, displayedComponents: [.hourAndMinute])
-                        .labelsHidden()
-                        .controlSize(.mini)
-                } else {
-                    Text("--:--").font(.caption2).foregroundStyle(.secondary)
-                }
+                DatePicker("", selection: endBind, displayedComponents: [.hourAndMinute])
+                    .labelsHidden()
+                    .controlSize(.mini)
+                    .opacity(endExists ? 1.0 : 0.45)
             }
         }
     }
