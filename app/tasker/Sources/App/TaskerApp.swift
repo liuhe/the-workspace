@@ -39,6 +39,13 @@ struct TaskerApp: App {
                 .keyboardShortcut("n", modifiers: [.command])
             }
         }
+
+        // 独立的可拖拽调整大小的统计窗口
+        Window("Statistics", id: "stats") {
+            StatsView()
+                .environmentObject(store)
+                .frame(minWidth: 800, idealWidth: 1000, minHeight: 500, idealHeight: 700)
+        }
     }
 }
 

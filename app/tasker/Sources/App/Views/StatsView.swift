@@ -25,6 +25,7 @@ struct TaskDayStat: Identifiable {
 }
 
 enum StatsBuilder {
+    /// 按 (day, task) 汇总所有带 startAt 的时间记录；日期升序。
     static func build(from tasks: [TaskAggregate], calendar: Calendar = .current) -> [DayStat] {
         var byDay: [Day: [UUID: [TimeEntry]]] = [:]
         var taskById: [UUID: TaskAggregate] = [:]
@@ -36,7 +37,7 @@ enum StatsBuilder {
                 byDay[d, default: [:]][t.id, default: []].append(e)
             }
         }
-        return byDay.keys.sorted(by: >).map { day in
+        return byDay.keys.sorted().map { day in    // 升序：旧 → 新
             let bucket = byDay[day]!
             let stats: [TaskDayStat] = bucket.map { (tid, es) in
                 let sorted = es.sorted { ($0.startAt ?? .distantPast) < ($1.startAt ?? .distantPast) }
@@ -106,14 +107,16 @@ struct GanttBar: View {
 
 struct StatsView: View {
     @EnvironmentObject var store: WorkspaceStore
-    @Binding var isPresented: Bool
+    @State private var editing = false
 
     var body: some View {
         VStack(spacing: 0) {
             HStack {
                 Text("Statistics").font(.title2)
                 Spacer()
-                Button("Close") { isPresented = false }
+                Toggle("Edit", isOn: $editing)
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
             }
             .padding(16)
             Divider()
@@ -125,14 +128,13 @@ struct StatsView: View {
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
-                        ForEach(days) { DayBlock(day: $0) }
+                        ForEach(days) { DayBlock(day: $0, editing: editing) }
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 8)
                 }
             }
         }
-        .frame(minWidth: 800, minHeight: 560)
     }
 
     private var days: [DayStat] { StatsBuilder.build(from: store.tasks) }
@@ -142,6 +144,7 @@ struct StatsView: View {
 
 private struct DayBlock: View {
     let day: DayStat
+    let editing: Bool
     @State private var expanded = true
 
     var body: some View {
@@ -150,14 +153,14 @@ private struct DayBlock: View {
             expandable: .binding($expanded, enabled: !day.tasks.isEmpty),
             label: day.day.descriptionWithWeekday,
             labelFont: .headline,
-            timeText: nil,
+            timeCell: .none,
             day: day.day,
             ranges: day.ranges,
             color: .indigo,
             duration: day.totalDuration
         )
         if expanded {
-            ForEach(day.tasks) { TaskBlock(dayContext: day.day, task: $0) }
+            ForEach(day.tasks) { TaskBlock(dayContext: day.day, task: $0, editing: editing) }
         }
         Divider().padding(.vertical, 4)
     }
@@ -166,6 +169,7 @@ private struct DayBlock: View {
 private struct TaskBlock: View {
     let dayContext: Day
     let task: TaskDayStat
+    let editing: Bool
     @State private var expanded = false
 
     var body: some View {
@@ -174,7 +178,7 @@ private struct TaskBlock: View {
             expandable: .binding($expanded, enabled: !task.entries.isEmpty),
             label: task.task.meta.title.isEmpty ? "(Untitled)" : task.task.meta.title,
             labelFont: .body,
-            timeText: nil,
+            timeCell: .none,
             day: dayContext,
             ranges: task.ranges,
             color: .teal,
@@ -182,39 +186,73 @@ private struct TaskBlock: View {
         )
         if expanded {
             ForEach(task.entries, id: \.id) { e in
-                let range: [(Date, Date)] = (e.startAt.flatMap { s in e.endAt.map { (s, $0) } }).map { [$0] } ?? []
-                StatsRow(
-                    indent: 48,
-                    expandable: .none,
-                    label: e.title.isEmpty ? "(no title)" : e.title,
-                    labelFont: .callout,
-                    timeText: timeText(for: e),
-                    day: dayContext,
-                    ranges: range,
-                    color: .blue,
-                    duration: e.duration ?? 0
-                )
+                EntryRow(dayContext: dayContext, taskId: task.task.id, entry: e, editing: editing)
             }
         }
     }
+}
 
-    private func timeText(for e: TimeEntry) -> String? {
-        guard let s = e.startAt else { return nil }
-        if let en = e.endAt { return "\(StatsFormat.timeOnly(s)) – \(StatsFormat.timeOnly(en))" }
+private struct EntryRow: View {
+    @EnvironmentObject var store: WorkspaceStore
+    let dayContext: Day
+    let taskId: UUID
+    let entry: TimeEntry
+    let editing: Bool
+
+    var body: some View {
+        let range: [(Date, Date)] = {
+            if let s = entry.startAt, let e = entry.endAt { return [(s, e)] }
+            return []
+        }()
+        StatsRow(
+            indent: 48,
+            expandable: .none,
+            label: entry.title.isEmpty ? "(no title)" : entry.title,
+            labelFont: .callout,
+            timeCell: editing ? .editable(makeStartBinding(), makeEndBinding()) : .display(displayTimeText),
+            day: dayContext,
+            ranges: range,
+            color: .blue,
+            duration: entry.duration ?? 0
+        )
+    }
+
+    private var displayTimeText: String? {
+        guard let s = entry.startAt else { return nil }
+        if let e = entry.endAt { return "\(StatsFormat.timeOnly(s)) – \(StatsFormat.timeOnly(e))" }
         return StatsFormat.timeOnly(s)
+    }
+
+    private func makeStartBinding() -> Binding<Date>? {
+        guard entry.startAt != nil else { return nil }
+        return Binding<Date>(
+            get: { entry.startAt ?? Date() },
+            set: { new in
+                store.updateEntry(taskId: taskId, entryId: entry.id) { $0.startAt = new }
+            }
+        )
+    }
+
+    private func makeEndBinding() -> Binding<Date>? {
+        guard entry.endAt != nil else { return nil }
+        return Binding<Date>(
+            get: { entry.endAt ?? Date() },
+            set: { new in
+                store.updateEntry(taskId: taskId, entryId: entry.id) { $0.endAt = new }
+            }
+        )
     }
 }
 
-// MARK: - 统一行布局：Label 列固定 240pt（chevron 和缩进都吃进这一列），
-//         timeText 固定 100pt（day/task 行传 nil 时留空占位），
-//         Gantt 用 maxWidth infinity 撑满剩余，Duration 固定 70pt。
+// MARK: - 统一行布局
+// [Label(260, 含缩进+chevron)] [TimeCell(200)] [Gantt(maxWidth)] [Duration(70)]
 
 private struct StatsRow: View {
     let indent: CGFloat
     let expandable: Expandable
     let label: String
     let labelFont: Font
-    let timeText: String?
+    let timeCell: TimeCell
     let day: Day
     let ranges: [(Date, Date)]
     let color: Color
@@ -225,10 +263,16 @@ private struct StatsRow: View {
         case binding(Binding<Bool>, enabled: Bool)
     }
 
+    enum TimeCell {
+        case none
+        case display(String?)
+        case editable(Binding<Date>?, Binding<Date>?)
+    }
+
     var body: some View {
         HStack(spacing: 10) {
             labelCell.frame(width: 260, alignment: .leading)
-            timeCell.frame(width: 100, alignment: .leading)
+            timeCellView.frame(width: 200, alignment: .leading)
             GanttBar(day: day, ranges: ranges, color: color)
                 .frame(maxWidth: .infinity)
             Text(StatsFormat.duration(duration))
@@ -275,13 +319,36 @@ private struct StatsRow: View {
     }
 
     @ViewBuilder
-    private var timeCell: some View {
-        if let t = timeText {
-            Text(t)
-                .font(.system(.caption, design: .monospaced))
-                .foregroundStyle(.secondary)
-        } else {
+    private var timeCellView: some View {
+        switch timeCell {
+        case .none:
             Color.clear
+        case .display(let s):
+            if let s {
+                Text(s)
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+            } else {
+                Color.clear
+            }
+        case .editable(let startBind, let endBind):
+            HStack(spacing: 4) {
+                if let sb = startBind {
+                    DatePicker("", selection: sb, displayedComponents: [.hourAndMinute])
+                        .labelsHidden()
+                        .controlSize(.mini)
+                } else {
+                    Text("--:--").font(.caption2).foregroundStyle(.secondary)
+                }
+                Text("→").font(.caption2).foregroundStyle(.secondary)
+                if let eb = endBind {
+                    DatePicker("", selection: eb, displayedComponents: [.hourAndMinute])
+                        .labelsHidden()
+                        .controlSize(.mini)
+                } else {
+                    Text("--:--").font(.caption2).foregroundStyle(.secondary)
+                }
+            }
         }
     }
 }

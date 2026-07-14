@@ -6,8 +6,8 @@ struct SidebarView: View {
     @State private var showingNewTaskSheet = false
     @State private var showingDayPickerForFilter = false
     @State private var showingSettings = false
-    @State private var showingStats = false
     @State private var pushingFromDay: Day?
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         VStack(spacing: 0) {
@@ -32,7 +32,7 @@ struct SidebarView: View {
                 .keyboardShortcut("n", modifiers: [.command])
                 Spacer()
                 Button {
-                    showingStats = true
+                    openWindow(id: "stats")
                 } label: { Image(systemName: "chart.bar") }
                 Button {
                     showingSettings = true
@@ -54,9 +54,6 @@ struct SidebarView: View {
         }
         .sheet(isPresented: $showingSettings) {
             SettingsView(isPresented: $showingSettings)
-        }
-        .sheet(isPresented: $showingStats) {
-            StatsView(isPresented: $showingStats)
         }
         .sheet(item: Binding(
             get: { pushingFromDay.map { DayWrap(day: $0) } },
