@@ -75,3 +75,8 @@
 - 修复 Backlog 里“Add to Today/Tomorrow/Choose date”时优先级丢失：新增 day assignment 时继承当前 filter 中显示的优先级
 - 调整重复任务在 Backlog 中的上下文状态展示：即使全局 status 是 done，Backlog 里显示为 notStarted
 - `swift run --package-path app/tasker taskerCheck` 通过（21/21）；`swift build --package-path app/tasker` 通过
+
+## 2026-07-15 11:02
+
+- 发布 `v0.4.4`：提交 `20d43e9` 已推送到 `origin/main`，tag `v0.4.4` 已推送触发 GitHub Actions Release
+- 本机 `gh` 未登录，无法从 CLI 查询 workflow 状态；需到 GitHub Actions / Releases 页面确认完成
