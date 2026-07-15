@@ -7,7 +7,6 @@ public struct TimeEntry: Codable, Hashable, Identifiable, Sendable {
     }
 
     public let id: UUID
-    public let taskId: UUID
     public var title: String
 
     /// 工作类型引用（AppSettings.workTypes[].id）；nil = 未设置
@@ -18,14 +17,12 @@ public struct TimeEntry: Codable, Hashable, Identifiable, Sendable {
     public var marker: Marker?
 
     public init(id: UUID = UUID(),
-                taskId: UUID,
                 title: String = "",
                 workTypeId: UUID? = nil,
                 startAt: Date? = nil,
                 endAt: Date? = nil,
                 marker: Marker? = nil) {
         self.id = id
-        self.taskId = taskId
         self.title = title
         self.workTypeId = workTypeId
         self.startAt = startAt

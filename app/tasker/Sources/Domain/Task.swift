@@ -1,27 +1,47 @@
 import Foundation
 
-/// 任务与"某天集合"的关联；priority 和 isCurrent 都是这条关联的属性，不同天独立。
+/// 任务与"某天集合"的关联；priority、isCurrent 和 entries 都是这条关联的属性，不同天独立。
 public struct DayAssignment: Hashable, Sendable {
     public var day: Day
     public var priority: Priority
     /// 该任务在这一天是否被标记为"当前"
     public var isCurrent: Bool
+    public var entries: [TimeEntry]
 
-    public init(day: Day, priority: Priority = .normal, isCurrent: Bool = false) {
+    public init(day: Day,
+                priority: Priority = .normal,
+                isCurrent: Bool = false,
+                entries: [TimeEntry] = []) {
         self.day = day
         self.priority = priority
         self.isCurrent = isCurrent
+        self.entries = entries.sorted(by: Self.entrySortComparator)
+    }
+
+    public mutating func sortEntries() {
+        entries.sort(by: Self.entrySortComparator)
+    }
+
+    private static func entrySortComparator(_ a: TimeEntry, _ b: TimeEntry) -> Bool {
+        switch (a.startAt, b.startAt) {
+        case let (l?, r?): return l < r
+        case (nil, _?):    return false
+        case (_?, nil):    return true
+        case (nil, nil):   return false
+        }
     }
 }
 
 extension DayAssignment: Codable {
-    // isCurrent 是新字段；老数据缺失时默认 false
-    private enum CodingKeys: String, CodingKey { case day, priority, isCurrent }
+    // entries 是新字段；老数据缺失时默认空数组
+    private enum CodingKeys: String, CodingKey { case day, priority, isCurrent, entries }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.day = try c.decode(Day.self, forKey: .day)
         self.priority = try c.decode(Priority.self, forKey: .priority)
         self.isCurrent = try c.decodeIfPresent(Bool.self, forKey: .isCurrent) ?? false
+        self.entries = try c.decodeIfPresent([TimeEntry].self, forKey: .entries) ?? []
+        sortEntries()
     }
 }
 
@@ -29,7 +49,7 @@ public struct Membership: Codable, Hashable, Sendable {
     public var dayAssignments: [DayAssignment]
 
     public init(dayAssignments: [DayAssignment] = []) {
-        self.dayAssignments = dayAssignments
+        self.dayAssignments = dayAssignments.sorted { $0.day < $1.day }
     }
 
     public var days: Set<Day> { Set(dayAssignments.map(\.day)) }
@@ -46,9 +66,24 @@ public struct Membership: Codable, Hashable, Sendable {
         dayAssignments.first(where: { $0.day == day })?.isCurrent ?? false
     }
 
-    public mutating func upsertDay(_ day: Day, priority: Priority = .normal) {
+    public func entries(inDay day: Day) -> [TimeEntry] {
+        dayAssignments.first(where: { $0.day == day })?.entries ?? []
+    }
+
+    public func hasEntries(inDay day: Day) -> Bool {
+        !(dayAssignments.first(where: { $0.day == day })?.entries.isEmpty ?? true)
+    }
+
+    public func day(containingEntry entryId: UUID) -> Day? {
+        dayAssignments.first(where: { a in
+            a.entries.contains(where: { $0.id == entryId })
+        })?.day
+    }
+
+    public mutating func upsertDay(_ day: Day, priority: Priority = .normal, isCurrent: Bool = false) {
         if !dayAssignments.contains(where: { $0.day == day }) {
-            dayAssignments.append(DayAssignment(day: day, priority: priority))
+            dayAssignments.append(DayAssignment(day: day, priority: priority, isCurrent: isCurrent))
+            dayAssignments.sort { $0.day < $1.day }
         }
     }
 
@@ -57,6 +92,7 @@ public struct Membership: Codable, Hashable, Sendable {
             dayAssignments[idx].priority = priority
         } else {
             dayAssignments.append(DayAssignment(day: day, priority: priority))
+            dayAssignments.sort { $0.day < $1.day }
         }
     }
 
@@ -69,8 +105,39 @@ public struct Membership: Codable, Hashable, Sendable {
     public mutating func removeDay(_ day: Day) {
         dayAssignments.removeAll { $0.day == day }
     }
-}
 
+    @discardableResult
+    public mutating func appendEntry(inDay day: Day,
+                                     priority: Priority = .normal,
+                                     isCurrent: Bool = false,
+                                     entry: TimeEntry) -> UUID {
+        upsertDay(day, priority: priority, isCurrent: isCurrent)
+        guard let idx = dayAssignments.firstIndex(where: { $0.day == day }) else { return entry.id }
+        dayAssignments[idx].entries.append(entry)
+        dayAssignments[idx].sortEntries()
+        return entry.id
+    }
+
+    public mutating func updateEntry(id: UUID, mutate: (inout TimeEntry) -> Void) -> Bool {
+        for assignmentIndex in dayAssignments.indices {
+            if let entryIndex = dayAssignments[assignmentIndex].entries.firstIndex(where: { $0.id == id }) {
+                mutate(&dayAssignments[assignmentIndex].entries[entryIndex])
+                dayAssignments[assignmentIndex].sortEntries()
+                return true
+            }
+        }
+        return false
+    }
+
+    public mutating func deleteEntry(id: UUID) -> Bool {
+        for assignmentIndex in dayAssignments.indices {
+            let before = dayAssignments[assignmentIndex].entries.count
+            dayAssignments[assignmentIndex].entries.removeAll { $0.id == id }
+            if dayAssignments[assignmentIndex].entries.count != before { return true }
+        }
+        return false
+    }
+}
 
 public struct TaskMeta: Hashable, Identifiable, Sendable {
     public let id: UUID
@@ -120,25 +187,28 @@ extension TaskMeta: Codable {
 
 public struct TaskAggregate: Identifiable, Sendable, Hashable {
     public var meta: TaskMeta
-    public var entries: [TimeEntry]
 
     public init(meta: TaskMeta, entries: [TimeEntry] = []) {
         self.meta = meta
-        self.entries = entries.sorted(by: Self.entrySortComparator)
+        for entry in entries {
+            let day = Self.migrationDay(for: entry, fallbackDays: meta.membership.days)
+            self.meta.membership.appendEntry(inDay: day, entry: entry)
+        }
     }
 
     public var id: UUID { meta.id }
-    /// 全局状态：所有时间记录汇总
+    public var entries: [TimeEntry] { meta.membership.dayAssignments.flatMap(\.entries).sorted(by: Self.entrySortComparator) }
+    /// 全局状态：所有日期关联下的时间记录汇总
     public var status: TaskStatus { StatusDeriver.derive(from: entries) }
     public var openEntry: TimeEntry? { entries.first(where: { $0.isOpen }) }
 
-    /// 某天的状态：只看 startAt 落在该天的时间记录
+    public func entries(inDay day: Day) -> [TimeEntry] {
+        meta.membership.entries(inDay: day)
+    }
+
+    /// 某天的状态：只看该天关联下的时间记录
     public func statusForDay(_ day: Day, calendar: Calendar = .current) -> TaskStatus {
-        let dayEntries = entries.filter { e in
-            guard let s = e.startAt else { return false }
-            return Day(date: s, calendar: calendar) == day
-        }
-        return StatusDeriver.derive(from: dayEntries)
+        StatusDeriver.derive(from: entries(inDay: day))
     }
 
     /// 上下文相关的状态：
@@ -170,60 +240,70 @@ public struct TaskAggregate: Identifiable, Sendable, Hashable {
     // MARK: - 时间记录命令
 
     @discardableResult
-    public mutating func addEntry(title: String = "",
+    public mutating func addEntry(inDay day: Day,
+                                  priority: Priority = .normal,
+                                  isCurrent: Bool = false,
+                                  title: String = "",
                                   workTypeId: UUID? = nil) -> UUID {
         let entry = TimeEntry(
-            taskId: meta.id,
             title: title,
             workTypeId: workTypeId,
             startAt: nil,
             endAt: nil,
             marker: nil
         )
-        entries.append(entry)
+        meta.membership.appendEntry(inDay: day, priority: priority, isCurrent: isCurrent, entry: entry)
         meta.updatedAt = Date()
         return entry.id
     }
 
     public mutating func startEntry(id: UUID, now: Date = Date()) throws {
-        guard let idx = entries.firstIndex(where: { $0.id == id }) else {
+        guard let day = meta.membership.day(containingEntry: id),
+              let entry = entries.first(where: { $0.id == id }) else {
             throw TaskCommandError.entryNotFound
         }
-        guard entries[idx].startAt == nil else {
+        guard entry.startAt == nil else {
             throw TaskCommandError.entryAlreadyStarted
         }
         if openEntry != nil { throw TaskCommandError.alreadyInProgress }
-        let wasDone = status == .done
-        entries[idx].startAt = now
-        if wasDone { entries[idx].marker = .restart }
+        let wasDone = meta.isRecurring ? statusForDay(day) == .done : status == .done
+        _ = meta.membership.updateEntry(id: id) { entry in
+            entry.startAt = now
+            if wasDone { entry.marker = .restart }
+        }
         meta.updatedAt = now
-        entries.sort(by: Self.entrySortComparator)
     }
 
     public mutating func endEntry(id: UUID, now: Date = Date()) throws {
-        guard let idx = entries.firstIndex(where: { $0.id == id }) else {
+        guard let entry = entries.first(where: { $0.id == id }) else {
             throw TaskCommandError.entryNotFound
         }
-        guard entries[idx].startAt != nil else {
+        guard entry.startAt != nil else {
             throw TaskCommandError.entryNotStarted
         }
-        guard entries[idx].endAt == nil else {
+        guard entry.endAt == nil else {
             throw TaskCommandError.entryAlreadyEnded
         }
-        entries[idx].endAt = now
+        _ = meta.membership.updateEntry(id: id) { $0.endAt = now }
         meta.updatedAt = now
     }
 
     public mutating func updateEntry(id: UUID, mutate: (inout TimeEntry) -> Void) {
-        guard let idx = entries.firstIndex(where: { $0.id == id }) else { return }
-        mutate(&entries[idx])
-        entries.sort(by: Self.entrySortComparator)
+        guard meta.membership.updateEntry(id: id, mutate: mutate) else { return }
         meta.updatedAt = Date()
     }
 
     public mutating func deleteEntry(id: UUID) {
-        entries.removeAll { $0.id == id }
+        guard meta.membership.deleteEntry(id: id) else { return }
         meta.updatedAt = Date()
+    }
+
+    public static func migrationDay(for entry: TimeEntry,
+                                    fallbackDays: Set<Day>,
+                                    calendar: Calendar = .current) -> Day {
+        if let s = entry.startAt { return Day(date: s, calendar: calendar) }
+        if let e = entry.endAt { return Day(date: e, calendar: calendar) }
+        return fallbackDays.min() ?? Day.today(calendar: calendar)
     }
 
     private static func entrySortComparator(_ a: TimeEntry, _ b: TimeEntry) -> Bool {

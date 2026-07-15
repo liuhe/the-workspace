@@ -1,7 +1,7 @@
 import Foundation
 import TaskerDomain
 
-/// 仓储：把 TaskAggregate 拆分成 tasks.jsonl + entries.jsonl + descriptions/*.md 三部分。
+/// 仓储：把 TaskAggregate 保存到 tasks.jsonl；旧版 entries.jsonl 会迁移进 DayAssignment.entries。
 /// - 写盘前先 diff 磁盘版本（通过 mtime）避免覆盖手改（简单策略：mtime 变化则先重载后写）
 /// - 读盘为整体读入
 public final class FileRepository {
@@ -23,15 +23,16 @@ public final class FileRepository {
     // MARK: - 读
 
     public func loadAll() throws -> [TaskAggregate] {
-        let metas = try JsonlFile.read(TaskMeta.self, from: layout.tasksFile)
-        let entries = try JsonlFile.read(TimeEntry.self, from: layout.entriesFile)
+        var metas = try JsonlFile.read(TaskMeta.self, from: layout.tasksFile)
+        let legacyEntries = try JsonlFile.read(LegacyTimeEntry.self, from: layout.entriesFile)
+        if !legacyEntries.isEmpty {
+            metas = migrateLegacyEntries(legacyEntries, into: metas)
+            try JsonlFile.write(metas, to: layout.tasksFile)
+            try archiveLegacyEntriesFile()
+        }
         lastTasksMTime = mtime(of: layout.tasksFile)
         lastEntriesMTime = mtime(of: layout.entriesFile)
-
-        let entriesByTask = Dictionary(grouping: entries, by: \.taskId)
-        return metas.map { meta in
-            TaskAggregate(meta: meta, entries: entriesByTask[meta.id] ?? [])
-        }
+        return metas.map { TaskAggregate(meta: $0) }
     }
 
     public func loadDescription(taskId: UUID) throws -> String {
@@ -42,7 +43,7 @@ public final class FileRepository {
 
     // MARK: - 写
 
-    /// 保存/更新一个聚合。策略：全量重写 tasks.jsonl 和 entries.jsonl。
+    /// 保存/更新一个聚合。策略：全量重写 tasks.jsonl。
     /// 写前先校验磁盘 mtime，若外部有更新，先读入合并再写。
     public func save(_ aggregate: inout TaskAggregate) throws {
         var all = try loadAllWithConflictReconciliation(newer: aggregate)
@@ -93,16 +94,74 @@ public final class FileRepository {
 
     private func writeAll(_ tasks: [TaskAggregate]) throws {
         let metas = tasks.map(\.meta)
-        let entries = tasks.flatMap(\.entries)
         try JsonlFile.write(metas, to: layout.tasksFile)
-        try JsonlFile.write(entries, to: layout.entriesFile)
         lastTasksMTime = mtime(of: layout.tasksFile)
         lastEntriesMTime = mtime(of: layout.entriesFile)
+    }
+
+    private func migrateLegacyEntries(_ legacyEntries: [LegacyTimeEntry],
+                                      into metas: [TaskMeta]) -> [TaskMeta] {
+        var migrated = metas
+        let entriesByTask = Dictionary(grouping: legacyEntries, by: \.taskId)
+        for idx in migrated.indices {
+            guard let legacyForTask = entriesByTask[migrated[idx].id] else { continue }
+            for legacy in legacyForTask {
+                let entry = legacy.entry
+                let day = TaskAggregate.migrationDay(for: entry,
+                                                     fallbackDays: migrated[idx].membership.days)
+                migrated[idx].membership.appendEntry(inDay: day, entry: entry)
+            }
+        }
+        return migrated
+    }
+
+    private func archiveLegacyEntriesFile() throws {
+        guard FileManager.default.fileExists(atPath: layout.entriesFile.path) else { return }
+        var destination = layout.entriesLegacyFile
+        if FileManager.default.fileExists(atPath: destination.path) {
+            destination = layout.root.appendingPathComponent("entries.legacy-\(UUID().uuidString).jsonl")
+        }
+        try FileManager.default.moveItem(at: layout.entriesFile, to: destination)
+        lastEntriesMTime = nil
     }
 
     private func mtime(of url: URL) -> Date? {
         guard FileManager.default.fileExists(atPath: url.path) else { return nil }
         let attrs = try? FileManager.default.attributesOfItem(atPath: url.path)
         return attrs?[.modificationDate] as? Date
+    }
+}
+
+private struct LegacyTimeEntry: Decodable {
+    let id: UUID
+    let taskId: UUID
+    let title: String
+    let workTypeId: UUID?
+    let startAt: Date?
+    let endAt: Date?
+    let marker: TimeEntry.Marker?
+
+    private enum CodingKeys: String, CodingKey {
+        case id, taskId, title, workTypeId, startAt, endAt, marker
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        taskId = try c.decode(UUID.self, forKey: .taskId)
+        title = try c.decodeIfPresent(String.self, forKey: .title) ?? ""
+        workTypeId = try c.decodeIfPresent(UUID.self, forKey: .workTypeId)
+        startAt = try c.decodeIfPresent(Date.self, forKey: .startAt)
+        endAt = try c.decodeIfPresent(Date.self, forKey: .endAt)
+        marker = try c.decodeIfPresent(TimeEntry.Marker.self, forKey: .marker)
+    }
+
+    var entry: TimeEntry {
+        TimeEntry(id: id,
+                  title: title,
+                  workTypeId: workTypeId,
+                  startAt: startAt,
+                  endAt: endAt,
+                  marker: marker)
     }
 }

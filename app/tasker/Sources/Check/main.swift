@@ -36,30 +36,30 @@ check("no entries → notStarted") {
     try expectEqual(StatusDeriver.derive(from: []), .notStarted)
 }
 check("entry without startAt and no marker → inProgress (has any record)") {
-    let e = TimeEntry(taskId: taskId, title: "empty")
+    let e = TimeEntry(title: "empty")
     try expectEqual(StatusDeriver.derive(from: [e]), .inProgress)
 }
 check("open entry (started, no marker) → inProgress") {
-    let e = TimeEntry(taskId: taskId, startAt: t0)
+    let e = TimeEntry(startAt: t0)
     try expectEqual(StatusDeriver.derive(from: [e]), .inProgress)
 }
 check("closed w/ done → done") {
-    let e = TimeEntry(taskId: taskId, startAt: t0, endAt: t0.addingTimeInterval(60), marker: .done)
+    let e = TimeEntry(startAt: t0, endAt: t0.addingTimeInterval(60), marker: .done)
     try expectEqual(StatusDeriver.derive(from: [e]), .done)
 }
 check("done then unmarked new entry: last marker is done → still done") {
-    let e1 = TimeEntry(taskId: taskId, startAt: t0, endAt: t0.addingTimeInterval(60), marker: .done)
-    let e2 = TimeEntry(taskId: taskId, startAt: t0.addingTimeInterval(120))  // 无 marker
+    let e1 = TimeEntry(startAt: t0, endAt: t0.addingTimeInterval(60), marker: .done)
+    let e2 = TimeEntry(startAt: t0.addingTimeInterval(120))  // 无 marker
     try expectEqual(StatusDeriver.derive(from: [e1, e2]), .done)
 }
 check("done then restart marker → inProgress (last marker is restart)") {
-    let e1 = TimeEntry(taskId: taskId, startAt: t0, endAt: t0.addingTimeInterval(60), marker: .done)
-    let e2 = TimeEntry(taskId: taskId, startAt: t0.addingTimeInterval(120), marker: .restart)
+    let e1 = TimeEntry(startAt: t0, endAt: t0.addingTimeInterval(60), marker: .done)
+    let e2 = TimeEntry(startAt: t0.addingTimeInterval(120), marker: .restart)
     try expectEqual(StatusDeriver.derive(from: [e1, e2]), .inProgress)
 }
 check("last-marker wins regardless of order in array") {
-    let older = TimeEntry(taskId: taskId, startAt: t0.addingTimeInterval(120), endAt: t0.addingTimeInterval(180), marker: .done)
-    let newer_unmarked = TimeEntry(taskId: taskId, startAt: t0.addingTimeInterval(300))
+    let older = TimeEntry(startAt: t0.addingTimeInterval(120), endAt: t0.addingTimeInterval(180), marker: .done)
+    let newer_unmarked = TimeEntry(startAt: t0.addingTimeInterval(300))
     // "最后一个有标"是 older（也是唯一有标）→ done
     try expectEqual(StatusDeriver.derive(from: [newer_unmarked, older]), .done)
 }
@@ -67,24 +67,25 @@ check("last-marker wins regardless of order in array") {
 // MARK: - TaskAggregate
 print("TaskAggregate")
 func makeTask() -> TaskAggregate { TaskAggregate(meta: TaskMeta(title: "T")) }
+let checkDay = Day(year: 2026, month: 7, day: 11)
 
 check("addEntry doesn't affect status when there was no marker (still inProgress if any entry)") {
     var t = makeTask()
-    _ = t.addEntry(title: "chunk")
+    _ = t.addEntry(inDay: checkDay, title: "chunk")
     try expectEqual(t.status, .inProgress)   // 有记录 = 进行中
 }
 check("startEntry → inProgress") {
     var t = makeTask()
-    let id = t.addEntry()
+    let id = t.addEntry(inDay: checkDay)
     try t.startEntry(id: id)
     try expectEqual(t.status, .inProgress)
 }
 check("mark done → done; then addEntry alone stays done; startEntry auto restart → inProgress") {
     var t = makeTask()
-    let a = t.addEntry(); try t.startEntry(id: a); try t.endEntry(id: a)
+    let a = t.addEntry(inDay: checkDay); try t.startEntry(id: a); try t.endEntry(id: a)
     t.updateEntry(id: a) { $0.marker = .done }
     try expectEqual(t.status, .done)
-    let b = t.addEntry()  // 新建但未开始，无 marker
+    let b = t.addEntry(inDay: checkDay)  // 新建但未开始，无 marker
     try expectEqual(t.status, .done)  // 最后一个有标依然是 done
     try t.startEntry(id: b)
     // startEntry 之前 status 是 done → 自动打 restart marker → 最后有标变 restart → inProgress
@@ -137,14 +138,11 @@ check("priority(in filter) uses day's assignment") {
 check("recurring task: statusForDay isolated to that day") {
     let d1 = Day(year: 2026, month: 7, day: 11)
     let d2 = Day(year: 2026, month: 7, day: 12)
-    let tid = UUID()
     // 在 d1 打了 done，在 d2 只有一段进行中
-    let d1Entry = TimeEntry(taskId: tid,
-                            startAt: d1.date().addingTimeInterval(3600),
+    let d1Entry = TimeEntry(startAt: d1.date().addingTimeInterval(3600),
                             endAt: d1.date().addingTimeInterval(7200),
                             marker: .done)
-    let d2Entry = TimeEntry(taskId: tid,
-                            startAt: d2.date().addingTimeInterval(3600))
+    let d2Entry = TimeEntry(startAt: d2.date().addingTimeInterval(3600))
     let agg = TaskAggregate(
         meta: TaskMeta(title: "recurring", membership: Membership(
             dayAssignments: [DayAssignment(day: d1), DayAssignment(day: d2)]
@@ -159,9 +157,8 @@ check("recurring task: statusForDay isolated to that day") {
 
 check("recurring tasks always appear in backlog even if globally done") {
     let d = Day.today()
-    let tid = UUID()
     // 全局 status = done
-    let doneEntry = TimeEntry(taskId: tid, startAt: Date(), endAt: Date(), marker: .done)
+    let doneEntry = TimeEntry(startAt: Date(), endAt: Date(), marker: .done)
     let recurring = TaskAggregate(
         meta: TaskMeta(title: "R", membership: Membership(
             dayAssignments: [DayAssignment(day: d)]
@@ -183,10 +180,8 @@ check("recurring tasks always appear in backlog even if globally done") {
 
 check("pushUncompleted respects per-day status for recurring") {
     let src = Day(year: 2026, month: 7, day: 11)
-    let tid = UUID()
     // 循环任务在 src 已完成
-    let recurringDone = TimeEntry(taskId: tid,
-                                  startAt: src.date().addingTimeInterval(3600),
+    let recurringDone = TimeEntry(startAt: src.date().addingTimeInterval(3600),
                                   endAt: src.date().addingTimeInterval(7200),
                                   marker: .done)
     let recurring = TaskAggregate(
@@ -263,19 +258,60 @@ check("task roundtrip with categoryId + workTypeId") {
 
     let catId = UUID()
     let wtId = UUID()
+    let day = Day.today()
     var agg = TaskAggregate(meta: TaskMeta(
         title: "hello",
         categoryId: catId,
-        membership: Membership(dayAssignments: [DayAssignment(day: Day.today())])
+        membership: Membership(dayAssignments: [DayAssignment(day: day)])
     ))
     try repo.save(&agg)
-    let eid = agg.addEntry(title: "chunk", workTypeId: wtId)
+    let eid = agg.addEntry(inDay: day, title: "chunk", workTypeId: wtId)
     try agg.startEntry(id: eid)
     try repo.save(&agg)
 
     let loaded = try repo.loadAll()
     try expectEqual(loaded[0].meta.categoryId, catId)
-    try expectEqual(loaded[0].entries[0].workTypeId, wtId)
+    try expectEqual(loaded[0].entries(inDay: day)[0].workTypeId, wtId)
+    try expectEqual(loaded[0].meta.membership.dayAssignments[0].entries[0].workTypeId, wtId)
+}
+
+check("legacy entries.jsonl migrates into day assignment entries and archives") {
+    struct OldEntry: Encodable {
+        let id: UUID
+        let taskId: UUID
+        let title: String
+        let workTypeId: UUID?
+        let startAt: Date?
+        let endAt: Date?
+        let marker: TimeEntry.Marker?
+    }
+
+    let tmp = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent("tasker-migrate-\(UUID().uuidString)")
+    defer { try? FileManager.default.removeItem(at: tmp) }
+    let repo = try FileRepository(root: tmp)
+    let layout = StorageLayout(root: tmp)
+    let d1 = Day(year: 2026, month: 7, day: 11)
+    let d2 = Day(year: 2026, month: 7, day: 12)
+    let taskId = UUID()
+    var agg = TaskAggregate(meta: TaskMeta(
+        id: taskId,
+        title: "legacy",
+        membership: Membership(dayAssignments: [DayAssignment(day: d1), DayAssignment(day: d2)])
+    ))
+    try repo.save(&agg)
+
+    let timed = OldEntry(id: UUID(), taskId: taskId, title: "timed", workTypeId: nil,
+                         startAt: d2.date().addingTimeInterval(3600), endAt: nil, marker: nil)
+    let floating = OldEntry(id: UUID(), taskId: taskId, title: "floating", workTypeId: nil,
+                            startAt: nil, endAt: nil, marker: nil)
+    try JsonlFile.write([timed, floating], to: layout.entriesFile)
+
+    let loaded = try repo.loadAll()
+    try expectEqual(loaded[0].entries(inDay: d2).map(\.title), ["timed"])
+    try expectEqual(loaded[0].entries(inDay: d1).map(\.title), ["floating"])
+    try expect(!FileManager.default.fileExists(atPath: layout.entriesFile.path))
+    try expect(FileManager.default.fileExists(atPath: layout.entriesLegacyFile.path))
 }
 
 print("---")

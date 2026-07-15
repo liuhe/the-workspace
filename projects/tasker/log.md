@@ -80,3 +80,10 @@
 
 - 发布 `v0.4.4`：提交 `20d43e9` 已推送到 `origin/main`，tag `v0.4.4` 已推送触发 GitHub Actions Release
 - 本机 `gh` 未登录，无法从 CLI 查询 workflow 状态；需到 GitHub Actions / Releases 页面确认完成
+
+## 2026-07-15 11:18
+
+- 模型修正：`TimeEntry` 不再直接挂在 Task 全局下，改为挂在 `DayAssignment.entries`（任务↔某天关联）下；`priority`、`isCurrent`、`entries` 都是某天关联属性
+- 数据迁移：启动时读取旧 `entries.jsonl`，按 `startAt` / `endAt` / 最早 assignment / today 规则迁入对应 `DayAssignment.entries`，再把旧文件归档为 `entries.legacy.jsonl`（或 `entries.legacy-<uuid>.jsonl`）
+- UI/统计同步：详情页按当前日期（Backlog 默认 today）展示和新增 entries；Stats 直接按 DayAssignment 汇总，不再靠 `startAt` 反推归属
+- 防误删：有时间记录的 day assignment 不允许直接移除或清空，避免删除历史记录

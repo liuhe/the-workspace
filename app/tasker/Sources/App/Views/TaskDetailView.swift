@@ -222,7 +222,7 @@ private struct EntriesSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("Time entries").font(.headline)
+                Text("Time entries · \(entryDay.descriptionWithWeekday)").font(.headline)
                 Spacer()
                 Button {
                     store.addEntry(taskId: aggregate.id)
@@ -232,16 +232,24 @@ private struct EntriesSection: View {
                 .buttonStyle(.plain)
             }
 
-            if aggregate.entries.isEmpty {
+            let entries = aggregate.entries(inDay: entryDay)
+            if entries.isEmpty {
                 Text("No entries yet").foregroundStyle(.secondary).padding(.vertical, 6)
             } else {
                 VStack(spacing: 0) {
-                    ForEach(aggregate.entries, id: \.id) { e in
+                    ForEach(entries, id: \.id) { e in
                         EntryRow(taskId: aggregate.id, entry: e)
                         Divider()
                     }
                 }
             }
+        }
+    }
+
+    private var entryDay: Day {
+        switch store.dayFilter {
+        case .day(let d): return d
+        case .backlog: return Day.today()
         }
     }
 }

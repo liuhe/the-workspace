@@ -170,10 +170,20 @@ final class WorkspaceStore: ObservableObject {
     }
 
     func removeFromDay(id: UUID, day: Day) {
+        guard let task = tasks.first(where: { $0.id == id }) else { return }
+        guard !task.meta.membership.hasEntries(inDay: day) else {
+            lastError = "Cannot remove a day that has time entries"
+            return
+        }
         updateMeta(id: id) { $0.membership.removeDay(day) }
     }
 
     func clearAllDays(id: UUID) {
+        guard let task = tasks.first(where: { $0.id == id }) else { return }
+        guard task.entries.isEmpty else {
+            lastError = "Cannot clear days while the task has time entries"
+            return
+        }
         updateMeta(id: id) { $0.membership.dayAssignments.removeAll() }
     }
 
@@ -214,9 +224,20 @@ final class WorkspaceStore: ObservableObject {
     func addEntry(taskId: UUID, title: String = "", workTypeId: UUID? = nil) {
         guard let idx = tasks.firstIndex(where: { $0.id == taskId }) else { return }
         var agg = tasks[idx]
+        let day = entryDayForCurrentFilter()
+        let sourcePriority = agg.priority(in: dayFilter)
+        let shouldMarkCurrent: Bool
+        switch dayFilter {
+        case .day: shouldMarkCurrent = showCurrent
+        case .backlog: shouldMarkCurrent = false
+        }
         // 默认预选第一个工作类型
         let defaultId = workTypeId ?? settings.workTypes.first?.id
-        agg.addEntry(title: title, workTypeId: defaultId)
+        agg.addEntry(inDay: day,
+                     priority: sourcePriority,
+                     isCurrent: shouldMarkCurrent,
+                     title: title,
+                     workTypeId: defaultId)
         persist(&agg, at: idx)
     }
 
@@ -294,6 +315,13 @@ final class WorkspaceStore: ObservableObject {
             tasks[idx] = agg
         } catch {
             lastError = "Save failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func entryDayForCurrentFilter() -> Day {
+        switch dayFilter {
+        case .day(let d): return d
+        case .backlog: return Day.today()
         }
     }
 

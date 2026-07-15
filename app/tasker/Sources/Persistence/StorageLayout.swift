@@ -5,6 +5,7 @@ public struct StorageLayout {
 
     public var tasksFile: URL { root.appendingPathComponent("tasks.jsonl") }
     public var entriesFile: URL { root.appendingPathComponent("entries.jsonl") }
+    public var entriesLegacyFile: URL { root.appendingPathComponent("entries.legacy.jsonl") }
     public var descriptionsDir: URL { root.appendingPathComponent("descriptions", isDirectory: true) }
     public var settingsFile: URL { root.appendingPathComponent("settings.json") }
 

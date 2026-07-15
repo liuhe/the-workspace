@@ -25,33 +25,14 @@ struct TaskDayStat: Identifiable {
 }
 
 enum StatsBuilder {
-    /// 按 (day, task) 汇总所有时间记录；日期升序。
-    /// - 有 startAt 的记录：按 startAt 归到那一天
-    /// - 没 startAt 的记录：归到该任务"最早的相关日"（membership.days ∪ 已有 startAt 的天，取最早）；
-    ///   都没有就归到今天，好让用户能在这里给它设时间
+    /// 按 (day assignment, task) 汇总时间记录；日期升序。
     static func build(from tasks: [TaskAggregate], calendar: Calendar = .current) -> [DayStat] {
         var byDay: [Day: [UUID: [TimeEntry]]] = [:]
         var taskById: [UUID: TaskAggregate] = [:]
         for t in tasks {
             taskById[t.id] = t
-            var unstarted: [TimeEntry] = []
-            for e in t.entries {
-                if let s = e.startAt {
-                    let d = Day(date: s, calendar: calendar)
-                    byDay[d, default: [:]][t.id, default: []].append(e)
-                } else {
-                    unstarted.append(e)
-                }
-            }
-            if !unstarted.isEmpty {
-                var candidates: Set<Day> = t.meta.membership.days
-                for e in t.entries {
-                    if let sa = e.startAt {
-                        candidates.insert(Day(date: sa, calendar: calendar))
-                    }
-                }
-                let anchor = candidates.min() ?? Day.today(calendar: calendar)
-                byDay[anchor, default: [:]][t.id, default: []].append(contentsOf: unstarted)
+            for assignment in t.meta.membership.dayAssignments where !assignment.entries.isEmpty {
+                byDay[assignment.day, default: [:]][t.id, default: []].append(contentsOf: assignment.entries)
             }
         }
         return byDay.keys.sorted().map { day in
