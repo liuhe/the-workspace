@@ -87,3 +87,8 @@
 - 数据迁移：启动时读取旧 `entries.jsonl`，按 `startAt` / `endAt` / 最早 assignment / today 规则迁入对应 `DayAssignment.entries`，再把旧文件归档为 `entries.legacy.jsonl`（或 `entries.legacy-<uuid>.jsonl`）
 - UI/统计同步：详情页按当前日期（Backlog 默认 today）展示和新增 entries；Stats 直接按 DayAssignment 汇总，不再靠 `startAt` 反推归属
 - 防误删：有时间记录的 day assignment 不允许直接移除或清空，避免删除历史记录
+
+## 2026-07-15 12:30
+
+- 发布 `v0.4.5`：提交 `205e149` 已推送到 `origin/main`，tag `v0.4.5` 已推送触发 GitHub Actions Release
+- 本地 release 验证通过：`cd app/tasker && swift build && swift run taskerCheck`（22/22）
