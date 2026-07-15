@@ -175,6 +175,7 @@ check("recurring tasks always appear in backlog even if globally done") {
         entries: [doneEntry]
     )
     try expectEqual(recurring.status, .done)
+    try expectEqual(recurring.status(in: .backlog), .notStarted)
     try expectEqual(nonRecurring.status, .done)
     let backlog = TaskQueries.apply(.backlog, to: [recurring, nonRecurring]).map(\.meta.title)
     try expectEqual(backlog, ["R"])  // 只有循环任务留下

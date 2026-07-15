@@ -69,3 +69,9 @@
   - `pushUncompleted`：循环任务用 `statusForDay(sourceDay)` 判定；已在源日完成的循环任务不推
   - 详情第一部分加"循环" toggle；状态徽章 + 侧栏行状态点都改用 `status(in: dayFilter)`；徽章旁标"循环"胶囊
   - 存储向前兼容：无 `isRecurring` 字段的旧任务默认 false
+
+## 2026-07-15 10:48
+
+- 修复 Backlog 里“Add to Today/Tomorrow/Choose date”时优先级丢失：新增 day assignment 时继承当前 filter 中显示的优先级
+- 调整重复任务在 Backlog 中的上下文状态展示：即使全局 status 是 done，Backlog 里显示为 notStarted
+- `swift run --package-path app/tasker taskerCheck` 通过（21/21）；`swift build --package-path app/tasker` 通过

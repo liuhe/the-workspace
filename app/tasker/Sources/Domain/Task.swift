@@ -143,10 +143,14 @@ public struct TaskAggregate: Identifiable, Sendable, Hashable {
 
     /// 上下文相关的状态：
     /// - 循环任务在 .day(d) 视图 → statusForDay(d)
+    /// - 循环任务在 Backlog 视图 → notStarted
     /// - 否则 → 全局 status
     public func status(in filter: TaskFilter) -> TaskStatus {
-        if meta.isRecurring, case .day(let d) = filter {
-            return statusForDay(d)
+        if meta.isRecurring {
+            switch filter {
+            case .day(let d): return statusForDay(d)
+            case .backlog: return .notStarted
+            }
         }
         return status
     }

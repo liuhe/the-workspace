@@ -165,7 +165,8 @@ final class WorkspaceStore: ObservableObject {
     }
 
     func addToDay(id: UUID, day: Day) {
-        updateMeta(id: id) { $0.membership.upsertDay(day) }
+        guard let sourcePriority = tasks.first(where: { $0.id == id })?.priority(in: dayFilter) else { return }
+        updateMeta(id: id) { $0.membership.upsertDay(day, priority: sourcePriority) }
     }
 
     func removeFromDay(id: UUID, day: Day) {
