@@ -107,3 +107,7 @@
 ## 2026-07-16 后续
 
 - Stats 时间刻度太高，压缩：`tickHeight` 12→5、`labelHeight` 11→10（字号 9→8）、header 顶部 padding 6→2；总高度从 ~33 降到 ~17
+
+## 2026-07-16 13:05
+
+- 发布 `v0.4.7`：提交 `7cbc21b` 已推送到 `origin/main`，tag `v0.4.7` 已推送触发 GitHub Actions Release
