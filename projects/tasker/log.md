@@ -99,3 +99,7 @@
   - 行选中：Day / Task / Entry 三种行都可点击高亮（背景色，再点一次取消）；用 `StatsRowID` 枚举做唯一 id，`StatsView` 持有单选状态
   - 顶部时间刻度：`HourRulerHeader` + `HourRuler`，0-24 小时，每 3 小时一大刻度带 `HH` 数字标签；用与行相同的 260/200/flex/70 列宽和 4px 横向 padding 保持和下方 Gantt 严格对齐
 - `swift build` + `taskerCheck`（22/22）通过
+
+## 2026-07-16 10:29
+
+- 发布 `v0.4.6`：提交 `14274e0` 已推送到 `origin/main`，tag `v0.4.6` 已推送触发 GitHub Actions Release
