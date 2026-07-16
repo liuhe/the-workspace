@@ -103,3 +103,7 @@
 ## 2026-07-16 10:29
 
 - 发布 `v0.4.6`：提交 `14274e0` 已推送到 `origin/main`，tag `v0.4.6` 已推送触发 GitHub Actions Release
+
+## 2026-07-16 后续
+
+- Stats 时间刻度太高，压缩：`tickHeight` 12→5、`labelHeight` 11→10（字号 9→8）、header 顶部 padding 6→2；总高度从 ~33 降到 ~17

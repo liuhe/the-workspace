@@ -135,7 +135,7 @@ struct StatsView: View {
             } else {
                 HourRulerHeader()
                     .padding(.horizontal, 16)
-                    .padding(.top, 6)
+                    .padding(.top, 2)
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
                         ForEach(days) {
@@ -167,8 +167,8 @@ private struct HourRulerHeader: View {
 }
 
 private struct HourRuler: View {
-    var tickHeight: CGFloat = 12
-    var labelHeight: CGFloat = 11
+    var tickHeight: CGFloat = 5
+    var labelHeight: CGFloat = 10
 
     var body: some View {
         GeometryReader { geo in
@@ -177,21 +177,22 @@ private struct HourRuler: View {
                 ForEach(0...24, id: \.self) { h in
                     let x = CGFloat(h) / 24 * w
                     let isMajor = h % 3 == 0
+                    let th = isMajor ? tickHeight : tickHeight * 0.6
                     Rectangle()
                         .fill(Color.secondary.opacity(isMajor ? 0.5 : 0.2))
-                        .frame(width: 1, height: isMajor ? tickHeight : tickHeight * 0.5)
-                        .position(x: x + 0.5, y: (isMajor ? tickHeight : tickHeight * 0.5) / 2)
+                        .frame(width: 1, height: th)
+                        .position(x: x + 0.5, y: th / 2)
                     if isMajor {
                         Text(String(format: "%02d", h))
-                            .font(.system(size: 9, design: .monospaced))
+                            .font(.system(size: 8, design: .monospaced))
                             .foregroundStyle(.secondary)
                             .fixedSize()
-                            .position(x: x, y: tickHeight + labelHeight / 2 + 1)
+                            .position(x: x, y: tickHeight + labelHeight / 2)
                     }
                 }
             }
         }
-        .frame(height: tickHeight + labelHeight + 4)
+        .frame(height: tickHeight + labelHeight)
     }
 }
 
