@@ -101,11 +101,20 @@ struct GanttBar: View {
     }
 }
 
+// MARK: - 行选中标识
+
+enum StatsRowID: Hashable {
+    case day(Day)
+    case task(Day, UUID)
+    case entry(UUID)
+}
+
 // MARK: - 主视图
 
 struct StatsView: View {
     @EnvironmentObject var store: WorkspaceStore
     @State private var editing = false
+    @State private var selection: StatsRowID?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -124,9 +133,14 @@ struct StatsView: View {
                 Text("No timed entries yet.").foregroundStyle(.secondary)
                 Spacer()
             } else {
+                HourRulerHeader()
+                    .padding(.horizontal, 16)
+                    .padding(.top, 6)
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
-                        ForEach(days) { DayBlock(day: $0, editing: editing) }
+                        ForEach(days) {
+                            DayBlock(day: $0, editing: editing, selection: $selection)
+                        }
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 8)
@@ -138,15 +152,61 @@ struct StatsView: View {
     private var days: [DayStat] { StatsBuilder.build(from: store.tasks) }
 }
 
+// MARK: - 顶部时间刻度（与下方 Gantt 列对齐）
+
+private struct HourRulerHeader: View {
+    var body: some View {
+        HStack(spacing: 10) {
+            Color.clear.frame(width: 260)
+            Color.clear.frame(width: 200)
+            HourRuler().frame(maxWidth: .infinity)
+            Color.clear.frame(width: 70)
+        }
+        .padding(.horizontal, 4)
+    }
+}
+
+private struct HourRuler: View {
+    var tickHeight: CGFloat = 12
+    var labelHeight: CGFloat = 11
+
+    var body: some View {
+        GeometryReader { geo in
+            let w = geo.size.width
+            ZStack(alignment: .topLeading) {
+                ForEach(0...24, id: \.self) { h in
+                    let x = CGFloat(h) / 24 * w
+                    let isMajor = h % 3 == 0
+                    Rectangle()
+                        .fill(Color.secondary.opacity(isMajor ? 0.5 : 0.2))
+                        .frame(width: 1, height: isMajor ? tickHeight : tickHeight * 0.5)
+                        .position(x: x + 0.5, y: (isMajor ? tickHeight : tickHeight * 0.5) / 2)
+                    if isMajor {
+                        Text(String(format: "%02d", h))
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .fixedSize()
+                            .position(x: x, y: tickHeight + labelHeight / 2 + 1)
+                    }
+                }
+            }
+        }
+        .frame(height: tickHeight + labelHeight + 4)
+    }
+}
+
 // MARK: - 块（组合行 + 子行）
 
 private struct DayBlock: View {
     let day: DayStat
     let editing: Bool
+    @Binding var selection: StatsRowID?
     @State private var expanded = true
 
     var body: some View {
         StatsRow(
+            rowID: .day(day.day),
+            selection: $selection,
             indent: 0,
             expandable: .binding($expanded, enabled: !day.tasks.isEmpty),
             label: day.day.descriptionWithWeekday,
@@ -158,7 +218,9 @@ private struct DayBlock: View {
             duration: day.totalDuration
         )
         if expanded {
-            ForEach(day.tasks) { TaskBlock(dayContext: day.day, task: $0, editing: editing) }
+            ForEach(day.tasks) {
+                TaskBlock(dayContext: day.day, task: $0, editing: editing, selection: $selection)
+            }
         }
         Divider().padding(.vertical, 4)
     }
@@ -168,10 +230,13 @@ private struct TaskBlock: View {
     let dayContext: Day
     let task: TaskDayStat
     let editing: Bool
+    @Binding var selection: StatsRowID?
     @State private var expanded = false
 
     var body: some View {
         StatsRow(
+            rowID: .task(dayContext, task.task.id),
+            selection: $selection,
             indent: 24,
             expandable: .binding($expanded, enabled: !task.entries.isEmpty),
             label: task.task.meta.title.isEmpty ? "(Untitled)" : task.task.meta.title,
@@ -184,7 +249,7 @@ private struct TaskBlock: View {
         )
         if expanded {
             ForEach(task.entries, id: \.id) { e in
-                EntryRow(dayContext: dayContext, taskId: task.task.id, entry: e, editing: editing)
+                EntryRow(dayContext: dayContext, taskId: task.task.id, entry: e, editing: editing, selection: $selection)
             }
         }
     }
@@ -196,6 +261,7 @@ private struct EntryRow: View {
     let taskId: UUID
     let entry: TimeEntry
     let editing: Bool
+    @Binding var selection: StatsRowID?
 
     var body: some View {
         let range: [(Date, Date)] = {
@@ -203,6 +269,8 @@ private struct EntryRow: View {
             return []
         }()
         StatsRow(
+            rowID: .entry(entry.id),
+            selection: $selection,
             indent: 48,
             expandable: .none,
             label: entry.title.isEmpty ? "(no title)" : entry.title,
@@ -258,6 +326,8 @@ private struct EntryRow: View {
 // [Label(260, 含缩进+chevron)] [TimeCell(200)] [Gantt(maxWidth)] [Duration(70)]
 
 private struct StatsRow: View {
+    let rowID: StatsRowID
+    @Binding var selection: StatsRowID?
     let indent: CGFloat
     let expandable: Expandable
     let label: String
@@ -280,6 +350,8 @@ private struct StatsRow: View {
         case editable(Binding<Date>, Binding<Date>, startExists: Bool, endExists: Bool)
     }
 
+    private var isSelected: Bool { selection == rowID }
+
     var body: some View {
         HStack(spacing: 10) {
             labelCell.frame(width: 260, alignment: .leading)
@@ -292,6 +364,15 @@ private struct StatsRow: View {
                 .frame(width: 70, alignment: .trailing)
         }
         .padding(.vertical, 3)
+        .padding(.horizontal, 4)
+        .background(
+            RoundedRectangle(cornerRadius: 4)
+                .fill(isSelected ? Color.accentColor.opacity(0.18) : Color.clear)
+        )
+        .contentShape(Rectangle())
+        .onTapGesture {
+            selection = isSelected ? nil : rowID
+        }
     }
 
     @ViewBuilder
