@@ -144,6 +144,7 @@ struct StatsView: View {
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
                 }
             }
         }
@@ -157,42 +158,43 @@ struct StatsView: View {
 private struct HourRulerHeader: View {
     var body: some View {
         HStack(spacing: 10) {
-            Color.clear.frame(width: 260)
-            Color.clear.frame(width: 200)
+            Spacer().frame(width: 260)
+            Spacer().frame(width: 200)
             HourRuler().frame(maxWidth: .infinity)
-            Color.clear.frame(width: 70)
+            Spacer().frame(width: 70)
         }
         .padding(.horizontal, 4)
+        .frame(height: HourRuler.totalHeight)
     }
 }
 
 private struct HourRuler: View {
-    var tickHeight: CGFloat = 5
-    var labelHeight: CGFloat = 10
+    static let tickHeight: CGFloat = 4
+    static let labelHeight: CGFloat = 10
+    static let totalHeight: CGFloat = tickHeight + labelHeight
 
     var body: some View {
-        GeometryReader { geo in
-            let w = geo.size.width
-            ZStack(alignment: .topLeading) {
-                ForEach(0...24, id: \.self) { h in
-                    let x = CGFloat(h) / 24 * w
-                    let isMajor = h % 3 == 0
-                    let th = isMajor ? tickHeight : tickHeight * 0.6
-                    Rectangle()
-                        .fill(Color.secondary.opacity(isMajor ? 0.5 : 0.2))
-                        .frame(width: 1, height: th)
-                        .position(x: x + 0.5, y: th / 2)
-                    if isMajor {
-                        Text(String(format: "%02d", h))
-                            .font(.system(size: 8, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                            .fixedSize()
-                            .position(x: x, y: tickHeight + labelHeight / 2)
-                    }
+        Canvas { ctx, size in
+            let w = size.width
+            let majorColor = GraphicsContext.Shading.color(.secondary.opacity(0.55))
+            let minorColor = GraphicsContext.Shading.color(.secondary.opacity(0.22))
+            for h in 0...24 {
+                let x = CGFloat(h) / 24 * w
+                let isMajor = h % 3 == 0
+                let th = isMajor ? Self.tickHeight : Self.tickHeight * 0.6
+                ctx.fill(
+                    Path(CGRect(x: x, y: 0, width: 1, height: th)),
+                    with: isMajor ? majorColor : minorColor
+                )
+                if isMajor {
+                    let label = Text(String(format: "%02d", h))
+                        .font(.system(size: 8, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                    ctx.draw(label, at: CGPoint(x: x, y: Self.tickHeight + Self.labelHeight / 2), anchor: .center)
                 }
             }
         }
-        .frame(height: tickHeight + labelHeight)
+        .frame(height: Self.totalHeight)
     }
 }
 

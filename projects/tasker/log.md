@@ -111,3 +111,7 @@
 ## 2026-07-16 13:05
 
 - 发布 `v0.4.7`：提交 `7cbc21b` 已推送到 `origin/main`，tag `v0.4.7` 已推送触发 GitHub Actions Release
+
+## 2026-07-19 Stats
+
+- HourRuler 从 `GeometryReader + ZStack + ForEach` 换成 `Canvas` 一次性绘制刻度和标签；`tickHeight` / `labelHeight` / `totalHeight` 提为 static，header 用 `Spacer` 替 `Color.clear` 并显式 `.frame(height:)` 与刻度对齐；StatsView 主体加 `.frame(maxWidth: .infinity, alignment: .topLeading)`
