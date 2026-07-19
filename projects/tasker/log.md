@@ -119,3 +119,7 @@
 ## 2026-07-19 Sidebar
 
 - 侧栏任务右键菜单新增两项：`Copy description path`（复制描述 `.md` 全路径到剪贴板）和 `Show in Finder`（`NSWorkspace.activateFileViewerSelecting`）。`WorkspaceStore` 暴露 `descriptionURL(for:)`，实际路径由 `repo.layout.descriptionURL` 提供，避免视图直接依赖 `StorageLayout`
+
+## 2026-07-19 发布
+
+- 发布 `v0.4.8`：提交 `c54580a` 已推送到 `origin/main`，tag `v0.4.8` 已推送触发 GitHub Actions Release
