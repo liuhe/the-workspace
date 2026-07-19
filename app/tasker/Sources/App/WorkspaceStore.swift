@@ -307,6 +307,10 @@ final class WorkspaceStore: ObservableObject {
         } catch { lastError = "Save description failed: \(error.localizedDescription)" }
     }
 
+    func descriptionURL(for id: UUID) -> URL {
+        repo.layout.descriptionURL(for: id)
+    }
+
     // MARK: - private
 
     private func persist(_ agg: inout TaskAggregate, at idx: Int) {

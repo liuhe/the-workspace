@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import TaskerDomain
 
@@ -346,6 +347,20 @@ private struct TaskContextMenu: View {
             Button(cur ? "Unmark current for \(d.description)" : "Mark current for \(d.description)") {
                 store.setIsCurrent(id: aggregate.id, inDay: d, isCurrent: !cur)
             }
+        }
+        Divider()
+        Button {
+            let path = store.descriptionURL(for: aggregate.id).path
+            let pb = NSPasteboard.general
+            pb.clearContents()
+            pb.setString(path, forType: .string)
+        } label: {
+            Label("Copy description path", systemImage: "doc.on.clipboard")
+        }
+        Button {
+            NSWorkspace.shared.activateFileViewerSelecting([store.descriptionURL(for: aggregate.id)])
+        } label: {
+            Label("Show in Finder", systemImage: "folder")
         }
         Divider()
         Button(role: .destructive) {
