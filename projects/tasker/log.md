@@ -141,3 +141,7 @@
 - `StatusDeriver.derive(from:now:)` 在推导前过滤掉 `startAt > now` 的 entry：预排计划不算进"进行中"，纯未来 entry → notStarted，未来 done marker 也不算 done
 - 无 startAt（已建未开始）保留原行为 —— 只过滤明确在未来的时间点
 - 新增 check 覆盖，taskerCheck 23/23
+
+## 2026-07-28 发布
+
+- 发布 `v0.4.10`：提交 `3c7cede` 已推送到 `origin/main`，tag `v0.4.10` 已推送触发 GitHub Actions Release
