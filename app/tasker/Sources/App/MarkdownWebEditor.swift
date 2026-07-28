@@ -77,9 +77,16 @@ struct MarkdownWebEditor: NSViewRepresentable {
             ]
           });
 
+          // 剥掉"整行只有 <br>"的行 —— Toast UI WYSIWYG 里空段落序列化成这个，
+          // 但反过来解析时不生成可放光标的块，会让退格跨过整段删掉上面的列表项
+          function normalizeMarkdown(md) {
+            if (typeof md !== 'string') return md;
+            return md.replace(/^[ \\t]*<br\\s*\\/?>[ \\t]*(\\r?\\n|$)/gim, '');
+          }
+
           var lastPushed = '';
           editor.on('change', function () {
-            var md = editor.getMarkdown();
+            var md = normalizeMarkdown(editor.getMarkdown());
             if (md === lastPushed) return;
             lastPushed = md;
             window.webkit.messageHandlers.editor.postMessage({ type: 'change', md: md });
@@ -87,6 +94,7 @@ struct MarkdownWebEditor: NSViewRepresentable {
 
           window.setMarkdown = function (md) {
             if (typeof md !== 'string') return;
+            md = normalizeMarkdown(md);
             if (editor.getMarkdown() === md) return;
             lastPushed = md;
             editor.setMarkdown(md, false);

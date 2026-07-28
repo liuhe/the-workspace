@@ -153,3 +153,9 @@
 ## 2026-07-28 发布
 
 - 发布 `v0.4.11`：提交 `52ab879` 已推送到 `origin/main`，tag `v0.4.11` 已推送触发 GitHub Actions Release
+
+## 2026-07-28 markdown 编辑器过滤孤立 `<br>` 行
+
+- `MarkdownWebEditor` 在 `setMarkdown` 与 `change→Swift` 两个方向都调用 `normalizeMarkdown(md)`，剥掉整行只有 `<br>` 的行
+- 起因：Toast UI WYSIWYG 里的空段落会被序列化成一串 `<br>` 存进 markdown；下次以 WYSIWYG 打开这段 markdown 时不生成可放光标的实体块，光标停在 `<br>` 区域按退格会跨过它删掉上面最后一个列表项
+- 加载/保存两个方向都清理，session 内再产生的 `<br>` 保存回磁盘时也会被清掉
