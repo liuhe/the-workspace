@@ -224,7 +224,7 @@ final class WorkspaceStore: ObservableObject {
     func addEntry(taskId: UUID, title: String = "", workTypeId: UUID? = nil) {
         guard let idx = tasks.firstIndex(where: { $0.id == taskId }) else { return }
         var agg = tasks[idx]
-        let day = entryDayForCurrentFilter()
+        let day = entryDay(for: agg)
         let sourcePriority = agg.priority(in: dayFilter)
         let shouldMarkCurrent: Bool
         switch dayFilter {
@@ -322,10 +322,11 @@ final class WorkspaceStore: ObservableObject {
         }
     }
 
-    private func entryDayForCurrentFilter() -> Day {
+    func entryDay(for agg: TaskAggregate) -> Day {
         switch dayFilter {
         case .day(let d): return d
-        case .backlog: return Day.today()
+        case .backlog:
+            return agg.meta.membership.dayAssignments.map(\.day).max() ?? Day.today()
         }
     }
 

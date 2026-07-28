@@ -401,7 +401,7 @@ private struct TaskRow: View {
     private var isCurrentInContext: Bool {
         switch store.dayFilter {
         case .day(let d): return aggregate.meta.membership.isCurrent(inDay: d)
-        case .backlog: return aggregate.meta.membership.hasAnyCurrent
+        case .backlog: return false
         }
     }
 }

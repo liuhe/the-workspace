@@ -123,3 +123,11 @@
 ## 2026-07-19 发布
 
 - 发布 `v0.4.8`：提交 `c54580a` 已推送到 `origin/main`，tag `v0.4.8` 已推送触发 GitHub Actions Release
+
+## 2026-07-28 详情日期下拉改成切换器
+
+- `TaskDetailView.MembershipBar` 的 Days 下拉从只读改成侧栏日期切换器：点击某条 assignment 直接 `store.dayFilter = .day(a.day)`
+- 下拉 label 从 `Days (N)` 改成显示"当前那天"：Day filter 时 = filter 那天；Backlog 时 = 最后一个 assignment day（空则 today）
+- `WorkspaceStore.entryDayForCurrentFilter` → 公开成 `entryDay(for: agg)`，Backlog 分支从 `Day.today()` 改成 `assignments.map(\.day).max() ?? today`；`addEntry`、详情 EntriesSection、下拉 label / checkmark 都用它 —— 三处一致
+- `taskerCheck` 22/22 通过
+- Sidebar 行的"👀 当前"标志在 Backlog filter 下不显示（`isCurrentInContext` Backlog 分支从 `hasAnyCurrent` 改为 `false`）；"当前"是 day-relation 属性，Backlog 没有当天上下文，展示无意义

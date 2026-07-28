@@ -49,6 +49,11 @@ private struct MembershipBar: View {
         return nil
     }
 
+    /// 下拉 label 显示的"当前那天"：Day filter → 那天；Backlog → 最后一个 assignment（空则 today）
+    private var effectiveDay: Day {
+        store.entryDay(for: aggregate)
+    }
+
     // MARK: - 关联日期只读下拉
 
     private var daysDropdown: some View {
@@ -57,11 +62,12 @@ private struct MembershipBar: View {
                 Text("(none)")
             } else {
                 ForEach(sortedAssignments, id: \.day) { a in
-                    // 只读：Button no-op；标记 filter 的当天为 selected
-                    Button {} label: {
+                    Button {
+                        store.dayFilter = .day(a.day)
+                    } label: {
                         HStack {
                             Text(dayListItem(a))
-                            if a.day == filterDay {
+                            if a.day == effectiveDay {
                                 Image(systemName: "checkmark")
                             }
                         }
@@ -70,8 +76,8 @@ private struct MembershipBar: View {
             }
         } label: {
             HStack(spacing: 4) {
-                Text("Days").font(.caption).foregroundStyle(.secondary)
-                Text("(\(sortedAssignments.count))").font(.caption)
+                Text(effectiveDay.descriptionWithWeekday).font(.caption)
+                Text("(\(sortedAssignments.count))").font(.caption).foregroundStyle(.secondary)
                 Image(systemName: "chevron.down").font(.caption2)
             }
         }
@@ -247,10 +253,7 @@ private struct EntriesSection: View {
     }
 
     private var entryDay: Day {
-        switch store.dayFilter {
-        case .day(let d): return d
-        case .backlog: return Day.today()
-        }
+        store.entryDay(for: aggregate)
     }
 }
 
