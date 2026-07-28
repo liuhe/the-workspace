@@ -131,3 +131,7 @@
 - `WorkspaceStore.entryDayForCurrentFilter` → 公开成 `entryDay(for: agg)`，Backlog 分支从 `Day.today()` 改成 `assignments.map(\.day).max() ?? today`；`addEntry`、详情 EntriesSection、下拉 label / checkmark 都用它 —— 三处一致
 - `taskerCheck` 22/22 通过
 - Sidebar 行的"👀 当前"标志在 Backlog filter 下不显示（`isCurrentInContext` Backlog 分支从 `hasAnyCurrent` 改为 `false`）；"当前"是 day-relation 属性，Backlog 没有当天上下文，展示无意义
+
+## 2026-07-28 发布
+
+- 发布 `v0.4.9`：提交 `efec768` 已推送到 `origin/main`，tag `v0.4.9` 已推送触发 GitHub Actions Release
