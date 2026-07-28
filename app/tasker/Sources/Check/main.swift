@@ -63,6 +63,15 @@ check("last-marker wins regardless of order in array") {
     // "最后一个有标"是 older（也是唯一有标）→ done
     try expectEqual(StatusDeriver.derive(from: [newer_unmarked, older]), .done)
 }
+check("future entries are ignored when deriving status") {
+    let now = Date(timeIntervalSince1970: 1_000_000)
+    let future = TimeEntry(startAt: now.addingTimeInterval(3600))
+    try expectEqual(StatusDeriver.derive(from: [future], now: now), .notStarted)
+    let futureDone = TimeEntry(startAt: now.addingTimeInterval(3600), marker: .done)
+    try expectEqual(StatusDeriver.derive(from: [futureDone], now: now), .notStarted)
+    let past = TimeEntry(startAt: now.addingTimeInterval(-60))
+    try expectEqual(StatusDeriver.derive(from: [past, future], now: now), .inProgress)
+}
 
 // MARK: - TaskAggregate
 print("TaskAggregate")
