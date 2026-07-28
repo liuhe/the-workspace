@@ -84,9 +84,70 @@ struct MarkdownWebEditor: NSViewRepresentable {
             return md.replace(/^[ \\t]*<br\\s*\\/?>[ \\t]*(\\r?\\n|$)/gim, '');
           }
 
+          // 拿当前 WYSIWYG 编辑区的 ProseMirror 根节点
+          function wwRoot() {
+            return document.querySelector('.toastui-editor-ww-container .ProseMirror')
+                || document.querySelector('.ProseMirror');
+          }
+
+          // 光标在编辑区文本内的字符偏移（跨节点累加 textContent 长度）
+          function getCursorTextOffset() {
+            var root = wwRoot();
+            if (!root) return null;
+            var sel = window.getSelection();
+            if (!sel || !sel.rangeCount) return null;
+            var range = sel.getRangeAt(0);
+            if (!root.contains(range.startContainer)) return null;
+            var pre = document.createRange();
+            pre.selectNodeContents(root);
+            pre.setEnd(range.startContainer, range.startOffset);
+            return pre.toString().length;
+          }
+
+          // 按字符偏移把光标放回去；越界时钳到末尾
+          function setCursorTextOffset(offset) {
+            if (offset == null) return;
+            var root = wwRoot();
+            if (!root) return;
+            var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+            var consumed = 0, node;
+            while ((node = walker.nextNode())) {
+              var len = node.textContent.length;
+              if (consumed + len >= offset) {
+                var r = document.createRange();
+                r.setStart(node, offset - consumed);
+                r.collapse(true);
+                var s = window.getSelection();
+                s.removeAllRanges();
+                s.addRange(r);
+                return;
+              }
+              consumed += len;
+            }
+            // 走到底还没匹配：贴到最末端
+            var end = document.createRange();
+            end.selectNodeContents(root);
+            end.collapse(false);
+            var s2 = window.getSelection();
+            s2.removeAllRanges();
+            s2.addRange(end);
+          }
+
           var lastPushed = '';
+          var suppressChange = false;
           editor.on('change', function () {
-            var md = normalizeMarkdown(editor.getMarkdown());
+            if (suppressChange) return;
+            var raw = editor.getMarkdown();
+            var md = normalizeMarkdown(raw);
+            // 粘贴等 mid-session mutation 会在 DOM 里塞 <br> 空段；保存干净还不够，
+            // WYSIWYG DOM 里得同步清掉，否则退格照样跨过空段删列表项
+            if (md !== raw) {
+              var savedOffset = getCursorTextOffset();
+              suppressChange = true;
+              try { editor.setMarkdown(md, false); } finally { suppressChange = false; }
+              // setMarkdown 是异步渲染，等 DOM 重建完再恢复光标
+              setTimeout(function () { setCursorTextOffset(savedOffset); }, 0);
+            }
             if (md === lastPushed) return;
             lastPushed = md;
             window.webkit.messageHandlers.editor.postMessage({ type: 'change', md: md });
@@ -97,7 +158,8 @@ struct MarkdownWebEditor: NSViewRepresentable {
             md = normalizeMarkdown(md);
             if (editor.getMarkdown() === md) return;
             lastPushed = md;
-            editor.setMarkdown(md, false);
+            suppressChange = true;
+            try { editor.setMarkdown(md, false); } finally { suppressChange = false; }
           };
 
           // Toast UI 输出的 URL 里 & 被写成 &amp;（HTML 实体），做一次解码

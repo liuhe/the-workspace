@@ -163,3 +163,15 @@
 ## 2026-07-28 发布
 
 - 发布 `v0.4.12`：提交 `0d01646` 已推送到 `origin/main`，tag `v0.4.12` 已推送触发 GitHub Actions Release
+
+## 2026-07-28 markdown 编辑器 mid-session 也清 `<br>`
+
+- v0.4.12 只在 setMarkdown / change→Swift 清 `<br>`；粘贴 mid-session 场景下 WYSIWYG DOM 里的 `<br>` 空段仍在，退格照样删列表项
+- 改成 `change` 里检测 `normalized !== raw` 时直接 `editor.setMarkdown(normalized, false)` 立即重设 editor；`suppressChange` guard 防死循环
+- 副作用：清理时光标位置丢失（只在真需要清 artifact 时触发，正常输入不会命中）
+
+## 2026-07-28 保留光标位置
+
+- `MarkdownWebEditor` change 里清 `<br>` 之前记 `getCursorTextOffset()`（跨 text node 累加字符偏移），`setMarkdown` 之后 `setTimeout` 里 `setCursorTextOffset(offset)` 恢复
+- 用文本字符偏移而非 prosemirror position：`<br>` 空段不含文本，删掉后其后内容的字符偏移不变，光标停留在同一文本处
+- 越界时钳到文档末尾
