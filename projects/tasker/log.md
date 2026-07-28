@@ -175,3 +175,7 @@
 - `MarkdownWebEditor` change 里清 `<br>` 之前记 `getCursorTextOffset()`（跨 text node 累加字符偏移），`setMarkdown` 之后 `setTimeout` 里 `setCursorTextOffset(offset)` 恢复
 - 用文本字符偏移而非 prosemirror position：`<br>` 空段不含文本，删掉后其后内容的字符偏移不变，光标停留在同一文本处
 - 越界时钳到文档末尾
+
+## 2026-07-28 发布
+
+- 发布 `v0.4.13`：提交 `aaf28da` 已推送到 `origin/main`，tag `v0.4.13` 已推送触发 GitHub Actions Release
