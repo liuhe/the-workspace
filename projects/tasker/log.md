@@ -149,3 +149,7 @@
 ## 2026-07-28 详情日期下拉去掉 👀 当前标
 
 - `TaskDetailView.dayListItem` 去掉 `if a.isCurrent { parts.append("👀") }`；下拉只显示日期 + 优先级 emoji，与 sidebar 保持一致（👀 只在右侧 Current toggle 里体现）
+
+## 2026-07-28 发布
+
+- 发布 `v0.4.11`：提交 `52ab879` 已推送到 `origin/main`，tag `v0.4.11` 已推送触发 GitHub Actions Release
