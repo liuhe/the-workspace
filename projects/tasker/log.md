@@ -194,3 +194,7 @@
 
 - 新增的 3 个 Toggle + tooltip 遗漏为中文，改成 English：Current only / Hide completed / Hide not started
 - overview.md 补上"UI 文案统一英文"约定，避免下次再踩
+
+## 2026-08-05 发布
+
+- 发布 `v0.4.15`：提交 `e7b6246` 已推送到 `origin/main`，tag `v0.4.15` 已推送触发 GitHub Actions Release
