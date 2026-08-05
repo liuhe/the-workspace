@@ -27,6 +27,8 @@ struct ContentView: View {
         }
         .onChange(of: store.dayFilter) { _, _ in store.pruneSelectionIfOffscreen() }
         .onChange(of: store.showCurrent) { _, _ in store.pruneSelectionIfOffscreen() }
+        .onChange(of: store.hideCompleted) { _, _ in store.pruneSelectionIfOffscreen() }
+        .onChange(of: store.hideNotStarted) { _, _ in store.pruneSelectionIfOffscreen() }
     }
 
     private var navTitle: String {
@@ -35,6 +37,10 @@ struct ContentView: View {
         case .day(let d): base = d.descriptionWithWeekday
         case .backlog: base = "Backlog"
         }
-        return store.showCurrent ? "\(base) · Current" : base
+        var tags: [String] = []
+        if store.showCurrent { tags.append("Current") }
+        if store.hideCompleted { tags.append("-Done") }
+        if store.hideNotStarted { tags.append("-NotStarted") }
+        return tags.isEmpty ? base : "\(base) · \(tags.joined(separator: " · "))"
     }
 }

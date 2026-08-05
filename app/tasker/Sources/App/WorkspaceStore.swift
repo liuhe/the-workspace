@@ -8,6 +8,8 @@ final class WorkspaceStore: ObservableObject {
     @Published private(set) var tasks: [TaskAggregate] = []
     @Published var dayFilter: TaskFilter = .day(Day.today())
     @Published var showCurrent: Bool = false
+    @Published var hideCompleted: Bool = false
+    @Published var hideNotStarted: Bool = false
     @Published var selectedTaskId: UUID?
     @Published var currentDescription: String = ""
     @Published var lastError: String?
@@ -62,7 +64,11 @@ final class WorkspaceStore: ObservableObject {
     }
 
     var filteredTasks: [TaskAggregate] {
-        TaskQueries.apply(dayFilter, currentOnly: showCurrent, to: tasks)
+        TaskQueries.apply(dayFilter,
+                          currentOnly: showCurrent,
+                          hideCompleted: hideCompleted,
+                          hideNotStarted: hideNotStarted,
+                          to: tasks)
     }
 
     var groupedFilteredTasks: [(CategoryDef, [TaskAggregate])] {

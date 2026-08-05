@@ -8,6 +8,8 @@ public enum TaskFilter: Hashable, Sendable {
 public enum TaskQueries {
     public static func apply(_ filter: TaskFilter,
                              currentOnly: Bool = false,
+                             hideCompleted: Bool = false,
+                             hideNotStarted: Bool = false,
                              to tasks: [TaskAggregate]) -> [TaskAggregate] {
         var filtered: [TaskAggregate]
         switch filter {
@@ -27,6 +29,12 @@ public enum TaskQueries {
             case .backlog:
                 filtered = filtered.filter { $0.meta.membership.hasAnyCurrent }
             }
+        }
+        if hideCompleted {
+            filtered = filtered.filter { $0.status(in: filter) != .done }
+        }
+        if hideNotStarted {
+            filtered = filtered.filter { $0.status(in: filter) != .notStarted }
         }
         return sortForDisplay(filtered, in: filter)
     }

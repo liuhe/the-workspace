@@ -16,9 +16,7 @@ struct SidebarView: View {
                 FilterMenu(showingDayPicker: $showingDayPickerForFilter,
                            pushingFromDay: $pushingFromDay)
                 Spacer()
-                Toggle("Current", isOn: $store.showCurrent)
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
+                StatusFilterMenu()
             }
             .padding(8)
             Divider()
@@ -171,6 +169,32 @@ private struct FilterMenu: View {
         let hasTasks = store.daysWithTasks.contains(day)
         let text = hasTasks ? "\(label) ●" : label
         return Button(text) { store.dayFilter = .day(day) }
+    }
+}
+
+// MARK: - 状态过滤下拉（3 个独立开关）
+
+private struct StatusFilterMenu: View {
+    @EnvironmentObject var store: WorkspaceStore
+
+    var body: some View {
+        Menu {
+            Toggle("只显示当前", isOn: $store.showCurrent)
+            Toggle("隐藏已完成", isOn: $store.hideCompleted)
+            Toggle("隐藏未开始", isOn: $store.hideNotStarted)
+        } label: {
+            Image(systemName: activeCount > 0 ? "line.3.horizontal.decrease.circle.fill"
+                                              : "line.3.horizontal.decrease.circle")
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("过滤：当前 / 已完成 / 未开始")
+    }
+
+    private var activeCount: Int {
+        (store.showCurrent ? 1 : 0)
+            + (store.hideCompleted ? 1 : 0)
+            + (store.hideNotStarted ? 1 : 0)
     }
 }
 
