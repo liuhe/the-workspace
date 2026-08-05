@@ -179,16 +179,16 @@ private struct StatusFilterMenu: View {
 
     var body: some View {
         Menu {
-            Toggle("只显示当前", isOn: $store.showCurrent)
-            Toggle("隐藏已完成", isOn: $store.hideCompleted)
-            Toggle("隐藏未开始", isOn: $store.hideNotStarted)
+            Toggle("Current only", isOn: $store.showCurrent)
+            Toggle("Hide completed", isOn: $store.hideCompleted)
+            Toggle("Hide not started", isOn: $store.hideNotStarted)
         } label: {
             Image(systemName: activeCount > 0 ? "line.3.horizontal.decrease.circle.fill"
                                               : "line.3.horizontal.decrease.circle")
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
-        .help("过滤：当前 / 已完成 / 未开始")
+        .help("Filter: current / completed / not started")
     }
 
     private var activeCount: Int {

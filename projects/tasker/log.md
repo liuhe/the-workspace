@@ -189,3 +189,8 @@
 ## 2026-08-05 发布
 
 - 发布 `v0.4.14`：提交 `d3d3dc4` 已推送到 `origin/main`，tag `v0.4.14` 已推送触发 GitHub Actions Release
+
+## 2026-08-05 侧栏过滤菜单英化
+
+- 新增的 3 个 Toggle + tooltip 遗漏为中文，改成 English：Current only / Hide completed / Hide not started
+- overview.md 补上"UI 文案统一英文"约定，避免下次再踩
