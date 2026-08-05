@@ -185,3 +185,7 @@
 - 侧栏右上"Current" 单开关 → 下拉菜单（漏斗图标，激活时填充），含 3 个独立 Toggle：只显示当前 / 隐藏已完成 / 隐藏未开始
 - `TaskQueries.apply` 新增 `hideCompleted` / `hideNotStarted` 参数，按 `status(in: filter)` 过滤（循环任务在 `.day(d)` 用当日状态）
 - `WorkspaceStore` 新增 `hideCompleted` / `hideNotStarted` @Published；`ContentView` 在其变化时 `pruneSelectionIfOffscreen`，navTitle 追加 `-Done` / `-NotStarted` 标签
+
+## 2026-08-05 发布
+
+- 发布 `v0.4.14`：提交 `d3d3dc4` 已推送到 `origin/main`，tag `v0.4.14` 已推送触发 GitHub Actions Release
