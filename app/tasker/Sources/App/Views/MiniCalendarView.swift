@@ -59,7 +59,7 @@ struct MiniCalendarView: View {
         return f.string(from: monthAnchor)
     }
 
-    /// 用系统 locale 的短星期名（Mon/Tue…；日本、中文等也有对应短名）
+    /// 强制英文短星期名（Sun/Mon/…），与全局 "UI 文案统一英文" 约定一致。
     private var weekdayHeader: some View {
         HStack {
             ForEach(orderedShortWeekdays, id: \.self) { d in
@@ -71,7 +71,7 @@ struct MiniCalendarView: View {
 
     private var orderedShortWeekdays: [String] {
         let f = DateFormatter()
-        f.locale = calendar.locale
+        f.locale = Locale(identifier: "en_US")
         // shortStandaloneWeekdaySymbols 一般是 Sun 开头
         let symbols = f.shortStandaloneWeekdaySymbols ?? ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
         let offset = calendar.firstWeekday - 1

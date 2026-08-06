@@ -58,7 +58,7 @@
 
 - 左侧栏：任务列表，过滤器 = 某天/当天 · 当前 · Backlog
 - 右侧：任务详情（markdown 编辑）+ 时间记录列表
-- **UI 文案统一英文**：所有按钮 / 菜单项 / tooltip 面向用户的可见文字都用英文；代码注释、log、overview 等开发文档保持中文
+- **UI 文案统一英文**：所有按钮 / 菜单项 / tooltip / 星期名 / 日期格式化输出等面向用户的可见文字都用英文（`Day.weekdayLabel` 默认 `en_US`，`MiniCalendarView` 表头强制 `en_US`）；代码注释、log、overview 等开发文档保持中文
 
 ## 明确不做
 

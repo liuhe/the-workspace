@@ -26,8 +26,9 @@ public struct Day: Codable, Hashable, Sendable, Comparable, CustomStringConverti
         String(format: "%04d-%02d-%02d", year, month, day)
     }
 
-    /// "周X"（中文短星期）。默认用 zh-CN locale。
-    public func weekdayLabel(locale: Locale = .current,
+    /// 短星期名（Mon/Tue/…）。默认强制英文；调用方可传入其它 locale 覆盖。
+    /// UI 文案统一英文，避免跟系统 locale 走漂到中文/日文短名。
+    public func weekdayLabel(locale: Locale = Locale(identifier: "en_US"),
                              calendar: Calendar = .current) -> String {
         let f = DateFormatter()
         f.calendar = calendar

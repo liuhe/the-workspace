@@ -128,12 +128,12 @@ private struct FilterMenu: View {
 
     var body: some View {
         Menu {
-            dayShortcut("Today", day: Day.today())
-            dayShortcut("Yesterday", day: dayOffset(-1))
-            dayShortcut("Tomorrow", day: dayOffset(1))
+            ForEach(-3...3, id: \.self) { offset in
+                dayItem(day: dayOffset(offset))
+            }
             Button("Choose date…") { showingDayPicker = true }
             Divider()
-            Button("Backlog") { store.dayFilter = .backlog }
+            backlogItem
             if case .day(let d) = store.dayFilter {
                 Divider()
                 Button("Push uncompleted to another day…") { pushingFromDay = d }
@@ -151,11 +151,7 @@ private struct FilterMenu: View {
     private var label: String {
         switch store.dayFilter {
         case .backlog: return "Backlog"
-        case .day(let d):
-            if d == Day.today() { return "Today \(d.weekdayLabel())" }
-            if d == dayOffset(-1) { return "Yesterday \(d.weekdayLabel())" }
-            if d == dayOffset(1) { return "Tomorrow \(d.weekdayLabel())" }
-            return d.descriptionWithWeekday
+        case .day(let d): return d.descriptionWithWeekday
         }
     }
 
@@ -164,11 +160,24 @@ private struct FilterMenu: View {
         return Day(date: d)
     }
 
-    /// 菜单快捷条目：有任务的日子在文字后加 ● 标识。
-    private func dayShortcut(_ label: String, day: Day) -> Button<Text> {
+    /// 菜单项：Toggle 让选中日呈现原生勾选态；今天前缀 ★；有任务的日子后缀 ●
+    @ViewBuilder
+    private func dayItem(day: Day) -> some View {
+        let isToday = day == Day.today()
         let hasTasks = store.daysWithTasks.contains(day)
-        let text = hasTasks ? "\(label) ●" : label
-        return Button(text) { store.dayFilter = .day(day) }
+        let text = (isToday ? "★ " : "") + day.descriptionWithWeekday + (hasTasks ? " ●" : "")
+        Toggle(text, isOn: Binding(
+            get: { store.dayFilter == .day(day) },
+            set: { if $0 { store.dayFilter = .day(day) } }
+        ))
+    }
+
+    @ViewBuilder
+    private var backlogItem: some View {
+        Toggle("Backlog", isOn: Binding(
+            get: { store.dayFilter == .backlog },
+            set: { if $0 { store.dayFilter = .backlog } }
+        ))
     }
 }
 
@@ -337,10 +346,8 @@ private struct TaskContextMenu: View {
 
     var body: some View {
         Menu("Add to") {
-            Button("Today") { store.addToDay(id: aggregate.id, day: Day.today()) }
-            Button("Tomorrow") {
-                let d = Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()
-                store.addToDay(id: aggregate.id, day: Day(date: d))
+            ForEach(-3...3, id: \.self) { offset in
+                addToDayItem(day: Self.dayOffset(offset))
             }
             Button("Choose date…") { onPickDay() }
         }
@@ -392,6 +399,20 @@ private struct TaskContextMenu: View {
         } label: {
             Label("Delete", systemImage: "trash")
         }
+    }
+
+    /// Add-to 菜单项：今天前缀 ★；任务已归属的日子后缀 ●；再点已归属日为幂等（upsertDay）
+    @ViewBuilder
+    private func addToDayItem(day: Day) -> some View {
+        let isToday = day == Day.today()
+        let already = aggregate.meta.membership.days.contains(day)
+        let text = (isToday ? "★ " : "") + day.descriptionWithWeekday + (already ? " ●" : "")
+        Button(text) { store.addToDay(id: aggregate.id, day: day) }
+    }
+
+    private static func dayOffset(_ n: Int) -> Day {
+        let d = Calendar.current.date(byAdding: .day, value: n, to: Date()) ?? Date()
+        return Day(date: d)
     }
 }
 

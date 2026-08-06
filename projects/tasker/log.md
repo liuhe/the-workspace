@@ -198,3 +198,11 @@
 ## 2026-08-05 发布
 
 - 发布 `v0.4.15`：提交 `e7b6246` 已推送到 `origin/main`，tag `v0.4.15` 已推送触发 GitHub Actions Release
+
+## 2026-08-05 日期下拉重构 & 星期英化
+
+- 侧栏日期下拉：`Today/Yesterday/Tomorrow` 相对词 → 直接展示 ±3 天（共 7 天）日期，每项 `YYYY-MM-DD EEE`；今天前缀 `★`，有任务的日子后缀 `●`；选中态用 `Toggle` 原生勾选（Backlog 同）
+- 触发按钮 label 也去掉相对词，直接显示日期
+- 右键任务 "Add to" 同款改造：±3 天日期列表 + `Choose date…`；今天 `★`、已归属日 `●`
+- `Day.weekdayLabel` 默认 locale 从 `.current`（会漂到中文短名）改成 `en_US`；`MiniCalendarView` 星期表头同步强制 `en_US`
+- overview 的 "UI 文案统一英文" 约定收紧：明确覆盖星期名/日期格式化输出
