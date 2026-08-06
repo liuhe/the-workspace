@@ -206,3 +206,7 @@
 - 右键任务 "Add to" 同款改造：±3 天日期列表 + `Choose date…`；今天 `★`、已归属日 `●`
 - `Day.weekdayLabel` 默认 locale 从 `.current`（会漂到中文短名）改成 `en_US`；`MiniCalendarView` 星期表头同步强制 `en_US`
 - overview 的 "UI 文案统一英文" 约定收紧：明确覆盖星期名/日期格式化输出
+
+## 2026-08-05 发布
+
+- 发布 `v0.4.16`：提交 `9aaf5bb` 已推送到 `origin/main`，tag `v0.4.16` 已推送触发 GitHub Actions Release
