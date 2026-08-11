@@ -144,6 +144,53 @@ check("priority(in filter) uses day's assignment") {
     try expectEqual(agg.priority(in: .day(d2)), .normal)
 }
 
+check("day view: sort by earliest startAt, then priority, then updatedAt") {
+    let d = Day(year: 2026, month: 8, day: 5)
+    // A: 有 startAt = 10:00, priority normal
+    let entryA = TimeEntry(startAt: d.date().addingTimeInterval(10 * 3600))
+    let a = TaskAggregate(
+        meta: TaskMeta(title: "A", membership: Membership(
+            dayAssignments: [DayAssignment(day: d, priority: .normal)]
+        )),
+        entries: [entryA]
+    )
+    // B: 有 startAt = 09:00, priority normal（时间更早 → 应排最前）
+    let entryB = TimeEntry(startAt: d.date().addingTimeInterval(9 * 3600))
+    let b = TaskAggregate(
+        meta: TaskMeta(title: "B", membership: Membership(
+            dayAssignments: [DayAssignment(day: d, priority: .normal)]
+        )),
+        entries: [entryB]
+    )
+    // C: 无 startAt，priority todayMustReach（高优先级但无时间 → 排到有时间的后面）
+    let c = TaskAggregate(
+        meta: TaskMeta(title: "C", membership: Membership(
+            dayAssignments: [DayAssignment(day: d, priority: .todayMustReach)]
+        ))
+    )
+    // D: 无 startAt，priority normal
+    let d2 = TaskAggregate(
+        meta: TaskMeta(title: "D", membership: Membership(
+            dayAssignments: [DayAssignment(day: d, priority: .normal)]
+        ))
+    )
+    let sorted = TaskQueries.sortForDisplay([d2, c, a, b], in: .day(d)).map(\.meta.title)
+    try expectEqual(sorted, ["B", "A", "C", "D"])
+}
+
+check("backlog view: time-based sort not applied, priority still primary") {
+    let d = Day.today()
+    // 都无 entries；仅按 priority 排（都在 backlog，未完成）
+    let hi = TaskAggregate(meta: TaskMeta(title: "H", membership: Membership(
+        dayAssignments: [DayAssignment(day: d, priority: .todayMustReach)]
+    )))
+    let lo = TaskAggregate(meta: TaskMeta(title: "L", membership: Membership(
+        dayAssignments: [DayAssignment(day: d, priority: .normal)]
+    )))
+    let sorted = TaskQueries.sortForDisplay([lo, hi], in: .backlog).map(\.meta.title)
+    try expectEqual(sorted, ["H", "L"])
+}
+
 check("recurring task: statusForDay isolated to that day") {
     let d1 = Day(year: 2026, month: 7, day: 11)
     let d2 = Day(year: 2026, month: 7, day: 12)

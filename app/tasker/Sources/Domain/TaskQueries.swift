@@ -39,9 +39,22 @@ public enum TaskQueries {
         return sortForDisplay(filtered, in: filter)
     }
 
-    /// 按上下文里的 priority 排序（emoji 高→emoji 低），同优先级按 updatedAt 倒序。
+    /// 排序规则：
+    /// - `.day(d)`：先看当天最早 `startAt`（有的靠前、按升序；都没有则并列进入下一档），再按 priority，最后 updatedAt 降序
+    /// - `.backlog`：按 priority，再按 updatedAt 降序（时间排序不适用）
     public static func sortForDisplay(_ tasks: [TaskAggregate], in filter: TaskFilter) -> [TaskAggregate] {
         tasks.sorted { a, b in
+            if case .day(let d) = filter {
+                let sa = a.entries(inDay: d).compactMap(\.startAt).min()
+                let sb = b.entries(inDay: d).compactMap(\.startAt).min()
+                switch (sa, sb) {
+                case (let x?, let y?):
+                    if x != y { return x < y }
+                case (.some, .none): return true
+                case (.none, .some): return false
+                case (.none, .none): break
+                }
+            }
             let pa = a.priority(in: filter)
             let pb = b.priority(in: filter)
             if pa != pb { return pa < pb }
