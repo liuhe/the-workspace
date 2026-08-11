@@ -216,3 +216,7 @@
 - `.day(d)` 视图：`sortForDisplay` 主键改为当天最早 `startAt` 升序，无 `startAt` 的排后；同档再按 priority、updatedAt desc
 - `.backlog` 视图不受影响（时间维度对 backlog 无意义）
 - Check 新增 2 个用例锁定行为（有/无 startAt 混合排序、backlog 保持 priority 主导）
+
+## 2026-08-11 发布
+
+- 发布 `v0.4.17`：提交 `abba1ef` 已推送到 `origin/main`，tag `v0.4.17` 已推送触发 GitHub Actions Release
