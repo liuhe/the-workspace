@@ -220,3 +220,9 @@
 ## 2026-08-11 发布
 
 - 发布 `v0.4.17`：提交 `abba1ef` 已推送到 `origin/main`，tag `v0.4.17` 已推送触发 GitHub Actions Release
+
+## 2026-08-20 Stats 支持日期范围
+
+- `StatsView` 头部新增 `DateRangePicker`（两个 `.date` DatePicker + "→"），默认起止 = today-2 → today（含今天最近 3 天）
+- `StatsBuilder.build` 加 `range: ClosedRange<Day>?` 参数：非空时按 `assignment.day` 过滤；nil 保留原行为
+- 起止反向时自动归正为 `min...max`；范围内无 entries 显示 "No timed entries in this range."

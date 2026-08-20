@@ -26,12 +26,16 @@ struct TaskDayStat: Identifiable {
 
 enum StatsBuilder {
     /// 按 (day assignment, task) 汇总时间记录；日期升序。
-    static func build(from tasks: [TaskAggregate], calendar: Calendar = .current) -> [DayStat] {
+    /// `range` 非 nil 时只保留落在闭区间内的 day assignments。
+    static func build(from tasks: [TaskAggregate],
+                      range: ClosedRange<Day>? = nil,
+                      calendar: Calendar = .current) -> [DayStat] {
         var byDay: [Day: [UUID: [TimeEntry]]] = [:]
         var taskById: [UUID: TaskAggregate] = [:]
         for t in tasks {
             taskById[t.id] = t
             for assignment in t.meta.membership.dayAssignments where !assignment.entries.isEmpty {
+                if let range, !range.contains(assignment.day) { continue }
                 byDay[assignment.day, default: [:]][t.id, default: []].append(contentsOf: assignment.entries)
             }
         }
@@ -115,11 +119,15 @@ struct StatsView: View {
     @EnvironmentObject var store: WorkspaceStore
     @State private var editing = false
     @State private var selection: StatsRowID?
+    /// 默认：含今天的最近 3 天 → [today-2, today]
+    @State private var startDate: Date = Self.defaultStartDate()
+    @State private var endDate: Date = Calendar.current.startOfDay(for: Date())
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
+            HStack(spacing: 12) {
                 Text("Statistics").font(.title2)
+                DateRangePicker(start: $startDate, end: $endDate)
                 Spacer()
                 Toggle("Edit", isOn: $editing)
                     .toggleStyle(.switch)
@@ -130,7 +138,7 @@ struct StatsView: View {
 
             if days.isEmpty {
                 Spacer()
-                Text("No timed entries yet.").foregroundStyle(.secondary)
+                Text("No timed entries in this range.").foregroundStyle(.secondary)
                 Spacer()
             } else {
                 HourRulerHeader()
@@ -150,7 +158,35 @@ struct StatsView: View {
         }
     }
 
-    private var days: [DayStat] { StatsBuilder.build(from: store.tasks) }
+    private var days: [DayStat] {
+        let s = Day(date: startDate)
+        let e = Day(date: endDate)
+        let range = s <= e ? s...e : e...s
+        return StatsBuilder.build(from: store.tasks, range: range)
+    }
+
+    private static func defaultStartDate() -> Date {
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        return cal.date(byAdding: .day, value: -2, to: today) ?? today
+    }
+}
+
+private struct DateRangePicker: View {
+    @Binding var start: Date
+    @Binding var end: Date
+
+    var body: some View {
+        HStack(spacing: 6) {
+            DatePicker("", selection: $start, displayedComponents: [.date])
+                .labelsHidden()
+                .controlSize(.small)
+            Text("→").foregroundStyle(.secondary)
+            DatePicker("", selection: $end, displayedComponents: [.date])
+                .labelsHidden()
+                .controlSize(.small)
+        }
+    }
 }
 
 // MARK: - 顶部时间刻度（与下方 Gantt 列对齐）
