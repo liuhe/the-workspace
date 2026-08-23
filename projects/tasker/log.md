@@ -230,3 +230,16 @@
 ## 2026-08-20 发布
 
 - 发布 `v0.4.18`：提交 `8634afb` 已推送到 `origin/main`，tag `v0.4.18` 已推送触发 GitHub Actions Release
+
+## 2026-08-21 TimeEntry 时间读取忽略日期部分
+
+- 背景：`TimeEntry.startAt`/`endAt` 存 `Date?`（含年月日），entry 归属由 `DayAssignment.day` 决定 → 用户编辑时分时日期部分可能漂移；Stats/排序按 raw Date 时会失真
+- 策略：**存储不动**（`Date?`），**读处理时丢日期只取时分秒**，日期一律用 assignment.day 锚定
+- 新 helper（`TimeEntry.swift`）：`startAt(inDay:)`, `endAt(inDay:)`, `duration(inDay:)`
+- 更新读取点：
+  - `TaskDayStat` 带 `day` 字段；`ranges`/`totalDuration` 走 helper
+  - `StatsBuilder.build` 内部按 `startAt(inDay: day)` 排序
+  - `StatsView.EntryRow`：Gantt range 和 duration 走 helper
+  - `TaskQueries.sortForDisplay` day 分支：`.min()` 前先经过 helper
+- 未改（本次范围外）：`StatusDeriver`（future 过滤跨天语义）、`Task.entrySortComparator`（DayAssignment 内同日排序）、`TaskDetailView` DatePicker 写入路径
+- Check 新增 2 个用例锁定 helper 行为；总计 27/27 通过

@@ -45,8 +45,8 @@ public enum TaskQueries {
     public static func sortForDisplay(_ tasks: [TaskAggregate], in filter: TaskFilter) -> [TaskAggregate] {
         tasks.sorted { a, b in
             if case .day(let d) = filter {
-                let sa = a.entries(inDay: d).compactMap(\.startAt).min()
-                let sb = b.entries(inDay: d).compactMap(\.startAt).min()
+                let sa = a.entries(inDay: d).compactMap { $0.startAt(inDay: d) }.min()
+                let sb = b.entries(inDay: d).compactMap { $0.startAt(inDay: d) }.min()
                 switch (sa, sb) {
                 case (let x?, let y?):
                     if x != y { return x < y }

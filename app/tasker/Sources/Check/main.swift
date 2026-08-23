@@ -144,6 +144,37 @@ check("priority(in filter) uses day's assignment") {
     try expectEqual(agg.priority(in: .day(d2)), .normal)
 }
 
+check("TimeEntry.startAt(inDay:) rebases date part to the given day") {
+    let dayA = Day(year: 2026, month: 8, day: 5)
+    let dayB = Day(year: 2026, month: 8, day: 10)
+    let cal = Calendar.current
+    let dayAStart = cal.startOfDay(for: dayA.date(calendar: cal))
+    let startOffset: TimeInterval = 14*3600 + 30*60 + 45
+    let endOffset: TimeInterval = 15*3600 + 45*60
+    let storedStart = dayAStart.addingTimeInterval(startOffset)
+    let storedEnd = dayAStart.addingTimeInterval(endOffset)
+    let entry = TimeEntry(startAt: storedStart, endAt: storedEnd)
+
+    let rebasedStart = entry.startAt(inDay: dayB)!
+    let rebasedEnd = entry.endAt(inDay: dayB)!
+    try expectEqual(Day(date: rebasedStart), dayB)
+    try expectEqual(Day(date: rebasedEnd), dayB)
+    let c = cal.dateComponents([.hour, .minute, .second], from: rebasedStart)
+    try expect((c.hour ?? 0) == 14)
+    try expect((c.minute ?? 0) == 30)
+    try expect((c.second ?? 0) == 45)
+    let expected: TimeInterval = endOffset - startOffset
+    try expectEqual(entry.duration(inDay: dayB), expected)
+}
+
+check("TimeEntry helpers: nil startAt/endAt → nil") {
+    let d = Day.today()
+    let entry = TimeEntry()
+    try expect(entry.startAt(inDay: d) == nil)
+    try expect(entry.endAt(inDay: d) == nil)
+    try expect(entry.duration(inDay: d) == nil)
+}
+
 check("day view: sort by earliest startAt, then priority, then updatedAt") {
     let d = Day(year: 2026, month: 8, day: 5)
     // A: 有 startAt = 10:00, priority normal

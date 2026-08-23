@@ -12,13 +12,16 @@ struct DayStat: Identifiable {
 }
 
 struct TaskDayStat: Identifiable {
+    let day: Day
     let task: TaskAggregate
     let entries: [TimeEntry]
     var id: UUID { task.id }
-    var totalDuration: TimeInterval { entries.compactMap(\.duration).reduce(0, +) }
+    var totalDuration: TimeInterval {
+        entries.compactMap { $0.duration(inDay: day) }.reduce(0, +)
+    }
     var ranges: [(Date, Date)] {
         entries.compactMap { e in
-            guard let s = e.startAt, let en = e.endAt else { return nil }
+            guard let s = e.startAt(inDay: day), let en = e.endAt(inDay: day) else { return nil }
             return (s, en)
         }
     }
@@ -42,8 +45,10 @@ enum StatsBuilder {
         return byDay.keys.sorted().map { day in
             let bucket = byDay[day]!
             let stats: [TaskDayStat] = bucket.map { (tid, es) in
-                let sorted = es.sorted { ($0.startAt ?? .distantFuture) < ($1.startAt ?? .distantFuture) }
-                return TaskDayStat(task: taskById[tid]!, entries: sorted)
+                let sorted = es.sorted {
+                    ($0.startAt(inDay: day) ?? .distantFuture) < ($1.startAt(inDay: day) ?? .distantFuture)
+                }
+                return TaskDayStat(day: day, task: taskById[tid]!, entries: sorted)
             }.sorted { $0.totalDuration > $1.totalDuration }
             return DayStat(day: day, tasks: stats)
         }
@@ -304,7 +309,9 @@ private struct EntryRow: View {
 
     var body: some View {
         let range: [(Date, Date)] = {
-            if let s = entry.startAt, let e = entry.endAt { return [(s, e)] }
+            if let s = entry.startAt(inDay: dayContext), let e = entry.endAt(inDay: dayContext) {
+                return [(s, e)]
+            }
             return []
         }()
         StatsRow(
@@ -319,7 +326,7 @@ private struct EntryRow: View {
             day: dayContext,
             ranges: range,
             color: .blue,
-            duration: entry.duration ?? 0
+            duration: entry.duration(inDay: dayContext) ?? 0
         )
     }
 
