@@ -243,3 +243,7 @@
   - `TaskQueries.sortForDisplay` day 分支：`.min()` 前先经过 helper
 - 未改（本次范围外）：`StatusDeriver`（future 过滤跨天语义）、`Task.entrySortComparator`（DayAssignment 内同日排序）、`TaskDetailView` DatePicker 写入路径
 - Check 新增 2 个用例锁定 helper 行为；总计 27/27 通过
+
+## 2026-08-21 发布
+
+- 发布 `v0.4.19`：提交 `016d6b5` 已推送到 `origin/main`，tag `v0.4.19` 已推送触发 GitHub Actions Release
