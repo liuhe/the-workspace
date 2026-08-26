@@ -29,10 +29,13 @@
 - ✅ 打卡动作：开始 / 暂停 / 完成 / 再开始
 - ✅ 端到端场景 check + app 启动烟测
 
+## 完成（后续）
+
+- ✅ 描述编辑器：接入 `markdown-lib` 的 `MarkdownEditor` package，tasker 侧保留 `Binding<String>` + debounce 保存模式，并补 host 侧 link / drop / image paste 处理
+
 ## 待办 / 未做
 
 - 🔘 UI 手动交互验证（新建、切换过滤器、编辑描述、打卡、删除，我没法在这台机上代替用户点）
-- 🔘 描述编辑器：目前是纯文本 monospace，未做 markdown 预览
 - 🔘 app icon / dock 图标
 - 🔘 打包 `.app` bundle（需装 Xcode）
 - 🔘 磁盘 mtime 冲突调解目前是 "reload 覆盖"，若同时改同一 task 会丢失最新一方；后续需三向合并或以 updatedAt 决胜

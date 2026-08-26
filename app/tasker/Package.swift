@@ -4,6 +4,9 @@ import PackageDescription
 let package = Package(
     name: "tasker",
     platforms: [.macOS(.v14)],
+    dependencies: [
+        .package(url: "https://github.com/liuhe/markdown-lib.git", from: "0.15.0"),
+    ],
     targets: [
         .target(
             name: "TaskerDomain",
@@ -20,7 +23,12 @@ let package = Package(
         ),
         .executableTarget(
             name: "tasker",
-            dependencies: ["TaskerDomain", "TaskerPersistence", "TaskerIcon"],
+            dependencies: [
+                "TaskerDomain",
+                "TaskerPersistence",
+                "TaskerIcon",
+                .product(name: "MarkdownEditor", package: "markdown-lib"),
+            ],
             path: "Sources/App",
             resources: [.copy("Resources")]
         ),

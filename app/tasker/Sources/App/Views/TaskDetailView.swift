@@ -176,13 +176,17 @@ private struct TaskInfoSection: View {
 
     /// WYSIWYG markdown 编辑器（WKWebView + Toast UI Editor），存储层仍是 markdown 文本
     private var descriptionEditor: some View {
-        MarkdownWebEditor(markdown: Binding(
-            get: { store.currentDescription },
-            set: { new in
-                store.currentDescription = new
-                scheduleSave()
-            }
-        ))
+        TaskMarkdownEditor(
+            markdown: Binding(
+                get: { store.currentDescription },
+                set: { new in
+                    store.currentDescription = new
+                    scheduleSave()
+                }
+            ),
+            fileURL: store.descriptionURL(for: aggregate.id),
+            workspaceRootURL: store.dataRoot
+        )
         .border(Color.secondary.opacity(0.2))
     }
 
