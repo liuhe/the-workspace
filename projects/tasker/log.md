@@ -254,3 +254,7 @@
 - 本地 `MarkdownWebEditor.swift` 不再维护内联 Toast UI / WKWebView 实现，改成 `TaskMarkdownEditor` 薄包装：内部使用 `DocumentStore` + `EditorBridge` + `MarkdownEditor.MarkdownWebEditor`，外部仍暴露 `Binding<String>` 给 `WorkspaceStore.currentDescription`
 - 传入描述文件 URL 和 data root：link/open/drop 交给 `NSWorkspace`，`Cmd+Shift+K` 用 `NSOpenPanel` 插入相对文件链接，图片粘贴写入 `<description>.assets/paste-yyyymmdd-HHmmss.ext`
 - 验证：`swift build --package-path app/tasker` 通过；`swift run --package-path app/tasker taskerCheck` 27/27 通过
+
+## 2026-08-26 发布
+
+- 发布 `v0.4.20`：提交 `8fa0ccb` 已推送到 `origin/main`，tag `v0.4.20` 已推送触发 GitHub Actions Release
