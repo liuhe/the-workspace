@@ -248,6 +248,13 @@
 
 - 发布 `v0.4.19`：提交 `016d6b5` 已推送到 `origin/main`，tag `v0.4.19` 已推送触发 GitHub Actions Release
 
+## 2026-08-25 重复任务自动带上一次的时间
+
+- 场景：重复任务在新的一天新建首条 entry 时，用户几乎总会填相同的时分；手动填是重复劳动
+- `TaskAggregate.entryTimeToCarry(to day:)`：仅重复任务；往前找最近一天里第一条已完成（start+end 都非 nil）的 entry；时分锚定到 `day` 返回
+- `WorkspaceStore.addEntry`：add 前记 `wasEmpty = entries(inDay: day).isEmpty`；add 后若 wasEmpty 且 helper 有值就 updateEntry 填上
+- Check 加 4 个用例：正常复制、非重复返回 nil、跳过只有 in-progress 的日子、无更早数据返回 nil；总 31/31
+
 ## 2026-08-26 markdown editor 切到 markdown-lib
 
 - 读 `https://github.com/liuhe/markdown-lib/blob/main/INTEGRATING_MARKDOWNEDITOR.md` 后，`tasker` target 新增 `markdown-lib` package 依赖和 `MarkdownEditor` product

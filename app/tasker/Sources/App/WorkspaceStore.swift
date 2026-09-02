@@ -239,11 +239,19 @@ final class WorkspaceStore: ObservableObject {
         }
         // 默认预选第一个工作类型
         let defaultId = workTypeId ?? settings.workTypes.first?.id
-        agg.addEntry(inDay: day,
-                     priority: sourcePriority,
-                     isCurrent: shouldMarkCurrent,
-                     title: title,
-                     workTypeId: defaultId)
+        let wasEmpty = agg.entries(inDay: day).isEmpty
+        let newId = agg.addEntry(inDay: day,
+                                 priority: sourcePriority,
+                                 isCurrent: shouldMarkCurrent,
+                                 title: title,
+                                 workTypeId: defaultId)
+        // 重复任务当天首条 → 从最近一天已完成的记录带时间
+        if wasEmpty, let carry = agg.entryTimeToCarry(to: day) {
+            agg.updateEntry(id: newId) {
+                $0.startAt = carry.startAt
+                $0.endAt = carry.endAt
+            }
+        }
         persist(&agg, at: idx)
     }
 

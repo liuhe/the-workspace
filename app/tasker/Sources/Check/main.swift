@@ -102,6 +102,81 @@ check("mark done → done; then addEntry alone stays done; startEntry auto resta
     try expectEqual(t.entries.first(where: { $0.id == b })?.marker, .restart)
 }
 
+check("entryTimeToCarry: recurring picks last day's completed entry, rebased to target day") {
+    let d1 = Day(year: 2026, month: 8, day: 5)
+    let d2 = Day(year: 2026, month: 8, day: 8)
+    let target = Day(year: 2026, month: 8, day: 10)
+    let d1Start = d1.date().addingTimeInterval(9*3600)     // 09:00 on d1
+    let d1End = d1.date().addingTimeInterval(10*3600)      // 10:00 on d1
+    let d2Start = d2.date().addingTimeInterval(14*3600)    // 14:00 on d2
+    let d2End = d2.date().addingTimeInterval(15*3600)      // 15:00 on d2
+    let agg = TaskAggregate(
+        meta: TaskMeta(title: "R", membership: Membership(
+            dayAssignments: [DayAssignment(day: d1), DayAssignment(day: d2), DayAssignment(day: target)]
+        ), isRecurring: true),
+        entries: [
+            TimeEntry(startAt: d1Start, endAt: d1End),
+            TimeEntry(startAt: d2Start, endAt: d2End),
+        ]
+    )
+    let carry = agg.entryTimeToCarry(to: target)
+    try expect(carry != nil)
+    // 取最近一天 d2 的模板；时分锚定到 target
+    try expectEqual(Day(date: carry!.startAt), target)
+    let cal = Calendar.current
+    let sc = cal.dateComponents([.hour, .minute], from: carry!.startAt)
+    let ec = cal.dateComponents([.hour, .minute], from: carry!.endAt)
+    try expect((sc.hour ?? 0) == 14 && (sc.minute ?? 0) == 0)
+    try expect((ec.hour ?? 0) == 15 && (ec.minute ?? 0) == 0)
+}
+
+check("entryTimeToCarry: non-recurring task returns nil") {
+    let d1 = Day(year: 2026, month: 8, day: 5)
+    let target = Day(year: 2026, month: 8, day: 10)
+    let entry = TimeEntry(startAt: d1.date().addingTimeInterval(9*3600),
+                          endAt: d1.date().addingTimeInterval(10*3600))
+    let agg = TaskAggregate(
+        meta: TaskMeta(title: "N", membership: Membership(
+            dayAssignments: [DayAssignment(day: d1), DayAssignment(day: target)]
+        ), isRecurring: false),
+        entries: [entry]
+    )
+    try expect(agg.entryTimeToCarry(to: target) == nil)
+}
+
+check("entryTimeToCarry: skips days without completed entries") {
+    let d1 = Day(year: 2026, month: 8, day: 5)
+    let d2 = Day(year: 2026, month: 8, day: 8)   // 只有 in-progress
+    let target = Day(year: 2026, month: 8, day: 10)
+    let d1Start = d1.date().addingTimeInterval(9*3600)
+    let d1End = d1.date().addingTimeInterval(10*3600)
+    let d2InProgress = TimeEntry(startAt: d2.date().addingTimeInterval(20*3600), endAt: nil)
+    let agg = TaskAggregate(
+        meta: TaskMeta(title: "R", membership: Membership(
+            dayAssignments: [DayAssignment(day: d1), DayAssignment(day: d2), DayAssignment(day: target)]
+        ), isRecurring: true),
+        entries: [
+            TimeEntry(startAt: d1Start, endAt: d1End),
+            d2InProgress,
+        ]
+    )
+    let carry = agg.entryTimeToCarry(to: target)
+    try expect(carry != nil)
+    let cal = Calendar.current
+    let sc = cal.dateComponents([.hour, .minute], from: carry!.startAt)
+    try expect((sc.hour ?? 0) == 9 && (sc.minute ?? 0) == 0)
+}
+
+check("entryTimeToCarry: no earlier data → nil") {
+    let target = Day(year: 2026, month: 8, day: 10)
+    let agg = TaskAggregate(
+        meta: TaskMeta(title: "R", membership: Membership(
+            dayAssignments: [DayAssignment(day: target)]
+        ), isRecurring: true)
+    )
+    try expect(agg.entryTimeToCarry(to: target) == nil)
+}
+
 // MARK: - TaskQueries
 print("TaskQueries")
 func mkAgg(_ title: String,

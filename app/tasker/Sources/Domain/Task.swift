@@ -298,6 +298,24 @@ public struct TaskAggregate: Identifiable, Sendable, Hashable {
         meta.updatedAt = Date()
     }
 
+    /// 重复任务在 `day` 上新建首条 entry 时，尝试从最近一天已完成的记录取时间，
+    /// 并把时分锚定到 `day` 上返回。非重复任务、无更早完成记录时返回 nil。
+    public func entryTimeToCarry(to day: Day, calendar: Calendar = .current) -> (startAt: Date, endAt: Date)? {
+        guard meta.isRecurring else { return nil }
+        let earlier = meta.membership.dayAssignments
+            .filter { $0.day < day }
+            .sorted { $0.day > $1.day }
+        for da in earlier {
+            let done = da.entries.first(where: { $0.startAt != nil && $0.endAt != nil })
+            if let template = done,
+               let s = template.startAt(inDay: day, calendar: calendar),
+               let e = template.endAt(inDay: day, calendar: calendar) {
+                return (s, e)
+            }
+        }
+        return nil
+    }
+
     public static func migrationDay(for entry: TimeEntry,
                                     fallbackDays: Set<Day>,
                                     calendar: Calendar = .current) -> Day {
