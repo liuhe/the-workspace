@@ -255,6 +255,10 @@
 - `WorkspaceStore.addEntry`：add 前记 `wasEmpty = entries(inDay: day).isEmpty`；add 后若 wasEmpty 且 helper 有值就 updateEntry 填上
 - Check 加 4 个用例：正常复制、非重复返回 nil、跳过只有 in-progress 的日子、无更早数据返回 nil；总 31/31
 
+## 2026-08-25 发布
+
+- 发布 `v0.4.21`：提交 `1238158` 已推送到 `origin/main`，tag `v0.4.21` 已推送触发 GitHub Actions Release（v0.4.20 已被之前的 markdown-lib 编辑器工作占用）
+
 ## 2026-08-26 markdown editor 切到 markdown-lib
 
 - 读 `https://github.com/liuhe/markdown-lib/blob/main/INTEGRATING_MARKDOWNEDITOR.md` 后，`tasker` target 新增 `markdown-lib` package 依赖和 `MarkdownEditor` product
