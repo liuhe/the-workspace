@@ -34,7 +34,7 @@ struct ContentView: View {
     private var navTitle: String {
         let base: String
         switch store.dayFilter {
-        case .day(let d): base = d.descriptionWithWeekday
+        case .day(let d): base = d.descriptionWithWeekday + (store.isDayCompleted(d) ? " ✓" : "")
         case .backlog: base = "Backlog"
         }
         var tags: [String] = []

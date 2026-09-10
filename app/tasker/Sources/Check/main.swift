@@ -412,6 +412,24 @@ check("settings roundtrip with id-based defs") {
     try expect(reloaded.categories[0].name.hasSuffix("-改"))
 }
 
+check("completed days roundtrip") {
+    let tmp = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent("tasker-days-\(UUID().uuidString)")
+    defer { try? FileManager.default.removeItem(at: tmp) }
+    let repo = try FileRepository(root: tmp)
+    let d1 = Day(year: 2026, month: 9, day: 8)
+    let d2 = Day(year: 2026, month: 9, day: 9)
+
+    try expectEqual(try repo.loadCompletedDays(), [])
+    try repo.saveCompletedDays([d2, d1])
+    try expectEqual(try repo.loadCompletedDays(), [d1, d2])
+
+    let data = try Data(contentsOf: StorageLayout(root: tmp).dayCompletionsFile)
+    let raw = String(data: data, encoding: .utf8) ?? ""
+    try expect(raw.contains("2026-09-08"))
+    try expect(raw.contains("2026-09-09"))
+}
+
 check("task roundtrip with categoryId + workTypeId") {
     let tmp = URL(fileURLWithPath: NSTemporaryDirectory())
         .appendingPathComponent("tasker-\(UUID().uuidString)")

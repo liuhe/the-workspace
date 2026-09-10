@@ -1,15 +1,17 @@
 import SwiftUI
 import TaskerDomain
 
-/// 简易月历视图；被选中日子高亮；有任务的日子加小点。
+/// 简易月历视图；被选中日子高亮；有任务的日子加小点；已完成日子加 ✓。
 struct MiniCalendarView: View {
     @Binding var selectedDate: Date
     let daysWithTasks: Set<Day>
+    let completedDays: Set<Day>
     @State private var monthAnchor: Date
 
-    init(selectedDate: Binding<Date>, daysWithTasks: Set<Day>) {
+    init(selectedDate: Binding<Date>, daysWithTasks: Set<Day>, completedDays: Set<Day> = []) {
         self._selectedDate = selectedDate
         self.daysWithTasks = daysWithTasks
+        self.completedDays = completedDays
         self._monthAnchor = State(initialValue: selectedDate.wrappedValue)
     }
 
@@ -117,6 +119,7 @@ struct MiniCalendarView: View {
             let selectedDay = Day(date: selectedDate, calendar: calendar)
             let isSelected = d == selectedDay
             let hasTasks = daysWithTasks.contains(d)
+            let isCompleted = completedDays.contains(d)
             Button {
                 selectedDate = d.date(calendar: calendar)
             } label: {
@@ -127,9 +130,15 @@ struct MiniCalendarView: View {
                         .frame(width: 28, height: 24)
                         .background(isSelected ? Color.accentColor : Color.clear)
                         .clipShape(Capsule())
-                    Circle()
-                        .fill(hasTasks ? Color.accentColor : Color.clear)
-                        .frame(width: 4, height: 4)
+                    HStack(spacing: 2) {
+                        Circle()
+                            .fill(hasTasks ? Color.accentColor : Color.clear)
+                            .frame(width: 4, height: 4)
+                        Text("✓")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundStyle(isCompleted ? Color.green : Color.clear)
+                    }
+                    .frame(height: 8)
                 }
             }
             .buttonStyle(.plain)

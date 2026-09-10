@@ -76,7 +76,7 @@ private struct MembershipBar: View {
             }
         } label: {
             HStack(spacing: 4) {
-                Text(effectiveDay.descriptionWithWeekday).font(.caption)
+                Text(dayLabel(effectiveDay)).font(.caption)
                 Text("(\(sortedAssignments.count))").font(.caption).foregroundStyle(.secondary)
                 Image(systemName: "chevron.down").font(.caption2)
             }
@@ -86,9 +86,13 @@ private struct MembershipBar: View {
     }
 
     private func dayListItem(_ a: DayAssignment) -> String {
-        var parts = [a.day.descriptionWithWeekday]
+        var parts = [dayLabel(a.day)]
         if !a.priority.emoji.isEmpty { parts.append(a.priority.emoji) }
         return parts.joined(separator: " ")
+    }
+
+    private func dayLabel(_ day: Day) -> String {
+        day.descriptionWithWeekday + (store.isDayCompleted(day) ? " ✓" : "")
     }
 
     // MARK: - 编辑控件（作用于 selectedDay）

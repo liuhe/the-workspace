@@ -269,3 +269,11 @@
 ## 2026-08-26 发布
 
 - 发布 `v0.4.20`：提交 `8fa0ccb` 已推送到 `origin/main`，tag `v0.4.20` 已推送触发 GitHub Actions Release
+
+## 2026-09-09 日期完成标记
+
+- 模型补充：某天集合可被用户标记完成；后续有任务新加入该日期集合时自动清除该日期完成标记
+- 存储新增 `day-completions.json`，由 `FileRepository.loadCompletedDays/saveCompletedDays` 读写，mtime poll 纳入外部变更检测
+- `WorkspaceStore.completedDays` 驱动 UI；`createTask`、`addToDay`、`pushUncompleted`、Backlog 下 `addEntry` 造成新日期关联时会清掉目标日期完成标记
+- 日期下拉、选日期日历、Add to 日期菜单、详情日期下拉、窗口标题都显示完成日 `✓`；当前日期下拉里新增 `Day completed` toggle
+- 验证：`swift build --package-path app/tasker` 通过；`swift run --package-path app/tasker taskerCheck` 32/32 通过

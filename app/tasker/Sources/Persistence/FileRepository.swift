@@ -10,6 +10,7 @@ public final class FileRepository {
     /// 上次成功读盘时观察到的 mtime，供 pollForExternalChanges 判定
     private var lastTasksMTime: Date?
     private var lastEntriesMTime: Date?
+    private var lastDayCompletionsMTime: Date?
 
     public init(root: URL) throws {
         self.layout = StorageLayout(root: root)
@@ -33,6 +34,18 @@ public final class FileRepository {
         lastTasksMTime = mtime(of: layout.tasksFile)
         lastEntriesMTime = mtime(of: layout.entriesFile)
         return metas.map { TaskAggregate(meta: $0) }
+    }
+
+    public func loadCompletedDays() throws -> Set<Day> {
+        let url = layout.dayCompletionsFile
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            lastDayCompletionsMTime = nil
+            return []
+        }
+        let data = try Data(contentsOf: url)
+        let days = try JSONDecoder().decode([Day].self, from: data)
+        lastDayCompletionsMTime = mtime(of: url)
+        return Set(days)
     }
 
     public func loadDescription(taskId: UUID) throws -> String {
@@ -63,6 +76,17 @@ public final class FileRepository {
         try? FileManager.default.removeItem(at: url)
     }
 
+    public func saveCompletedDays(_ days: Set<Day>) throws {
+        let enc = JSONEncoder()
+        enc.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let data = try enc.encode(days.sorted())
+        try FileManager.default.createDirectory(
+            at: layout.root, withIntermediateDirectories: true
+        )
+        try data.write(to: layout.dayCompletionsFile, options: .atomic)
+        lastDayCompletionsMTime = mtime(of: layout.dayCompletionsFile)
+    }
+
     public func saveDescription(taskId: UUID, markdown: String) throws {
         let url = layout.descriptionURL(for: taskId)
         try FileManager.default.createDirectory(
@@ -78,7 +102,8 @@ public final class FileRepository {
     public func hasExternalChanges() -> Bool {
         let t = mtime(of: layout.tasksFile)
         let e = mtime(of: layout.entriesFile)
-        return t != lastTasksMTime || e != lastEntriesMTime
+        let d = mtime(of: layout.dayCompletionsFile)
+        return t != lastTasksMTime || e != lastEntriesMTime || d != lastDayCompletionsMTime
     }
 
     // MARK: - private

@@ -22,7 +22,7 @@
   - 最后一条带 `再开始` 标志 → 回到进行中
 
 ### 任务集合 TaskCollection + Membership
-- **某天集合**：带日期
+- **某天集合**：带日期，可被用户标记为已完成（表示这一天已复盘/无需再回看）；若之后有任务新加入该日期集合，自动清除该日期完成标记
 - **Backlog（虚拟）**：未完成任务；循环任务永远出现
 
 任务通过 **Membership.dayAssignments**（任务↔某天的关联对象）归属日期集合。一个任务可属于多天。
@@ -45,6 +45,7 @@
 - **平台**：macOS Native（默认 Swift + SwiftUI；未来跨平台再议）
 - **存储**：本地磁盘
   - jsonl 存结构化数据（任务元信息、时间记录）
+  - json 存日期集合完成标记等轻量全局状态
   - markdown 存描述等大字段（每个任务一个 `.md` 文件）
   - 默认根目录 `~/Documents/tasker/`；用户可在设置里改，路径存 `UserDefaults`（key `tasker.dataRoot`）
 - **代码位置**：`app/tasker/`（SwiftPM 工程，与本项目文档目录 `projects/tasker/` 平级）

@@ -12,6 +12,7 @@ final class WorkspaceStore: ObservableObject {
     @Published var hideNotStarted: Bool = false
     @Published var selectedTaskId: UUID?
     @Published var currentDescription: String = ""
+    @Published private(set) var completedDays: Set<Day> = []
     @Published var lastError: String?
     @Published private(set) var settings: AppSettings = .defaults
     @Published private(set) var dataRoot: URL
@@ -56,6 +57,7 @@ final class WorkspaceStore: ObservableObject {
             UserDefaults.standard.set(url.path, forKey: Self.dataRootDefaultsKey)
             selectedTaskId = nil
             currentDescription = ""
+            completedDays = []
             reload()
             reloadSettings()
         } catch {
@@ -94,6 +96,19 @@ final class WorkspaceStore: ObservableObject {
         return acc
     }
 
+    func isDayCompleted(_ day: Day) -> Bool {
+        completedDays.contains(day)
+    }
+
+    func setDayCompleted(_ day: Day, isCompleted: Bool) {
+        if isCompleted {
+            completedDays.insert(day)
+        } else {
+            completedDays.remove(day)
+        }
+        saveCompletedDays()
+    }
+
     /// 当前过滤下选中的任务已不在列表里时，清空选中和描述。
     /// 由 filter 切换（dayFilter / showCurrent）触发；任务自身变动不触发。
     func pruneSelectionIfOffscreen() {
@@ -109,6 +124,7 @@ final class WorkspaceStore: ObservableObject {
     func reload() {
         do {
             tasks = try repo.loadAll()
+            completedDays = try repo.loadCompletedDays()
             if let id = selectedTaskId, !tasks.contains(where: { $0.id == id }) {
                 selectedTaskId = nil
                 currentDescription = ""
@@ -124,14 +140,17 @@ final class WorkspaceStore: ObservableObject {
         let trimmed = title.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return }
         var meta = TaskMeta(title: trimmed, categoryId: nil)
+        var addedDay: Day?
         if case .day(let d) = dayFilter {
             meta.membership.dayAssignments.append(
                 DayAssignment(day: d, priority: .normal, isCurrent: showCurrent)
             )
+            addedDay = d
         }
         var agg = TaskAggregate(meta: meta)
         do {
             try repo.save(&agg)
+            if let addedDay { clearCompletedDay(addedDay) }
             tasks.append(agg)
             selectedTaskId = agg.id
             currentDescription = ""
@@ -150,12 +169,13 @@ final class WorkspaceStore: ObservableObject {
         }
     }
 
-    func updateMeta(id: UUID, _ mutate: (inout TaskMeta) -> Void) {
-        guard let idx = tasks.firstIndex(where: { $0.id == id }) else { return }
+    @discardableResult
+    func updateMeta(id: UUID, _ mutate: (inout TaskMeta) -> Void) -> Bool {
+        guard let idx = tasks.firstIndex(where: { $0.id == id }) else { return false }
         var agg = tasks[idx]
         mutate(&agg.meta)
         agg.meta.updatedAt = Date()
-        persist(&agg, at: idx)
+        return persist(&agg, at: idx)
     }
 
     /// 直接改某天关联的优先级（哪一天由调用方指定；给详情里的 chip / 列表右键用）
@@ -171,8 +191,11 @@ final class WorkspaceStore: ObservableObject {
     }
 
     func addToDay(id: UUID, day: Day) {
-        guard let sourcePriority = tasks.first(where: { $0.id == id })?.priority(in: dayFilter) else { return }
-        updateMeta(id: id) { $0.membership.upsertDay(day, priority: sourcePriority) }
+        guard let task = tasks.first(where: { $0.id == id }) else { return }
+        let wasAssigned = task.meta.membership.days.contains(day)
+        let sourcePriority = task.priority(in: dayFilter)
+        let saved = updateMeta(id: id) { $0.membership.upsertDay(day, priority: sourcePriority) }
+        if saved && !wasAssigned { clearCompletedDay(day) }
     }
 
     func removeFromDay(id: UUID, day: Day) {
@@ -214,14 +237,18 @@ final class WorkspaceStore: ObservableObject {
             let s = $0.meta.isRecurring ? $0.statusForDay(sourceDay) : $0.status
             return s != .done
         }
+        var addedToTarget = false
         for c in candidates {
+            let wasAssigned = c.meta.membership.days.contains(targetDay)
             let srcPriority = c.meta.membership.priority(inDay: sourceDay) ?? .normal
-            updateMeta(id: c.id) { meta in
+            let saved = updateMeta(id: c.id) { meta in
                 if meta.membership.priority(inDay: targetDay) == nil {
                     meta.membership.upsertDay(targetDay, priority: srcPriority)
                 }
             }
+            if saved && !wasAssigned { addedToTarget = true }
         }
+        if addedToTarget { clearCompletedDay(targetDay) }
         return candidates.count
     }
 
@@ -231,6 +258,7 @@ final class WorkspaceStore: ObservableObject {
         guard let idx = tasks.firstIndex(where: { $0.id == taskId }) else { return }
         var agg = tasks[idx]
         let day = entryDay(for: agg)
+        let wasAssigned = agg.meta.membership.days.contains(day)
         let sourcePriority = agg.priority(in: dayFilter)
         let shouldMarkCurrent: Bool
         switch dayFilter {
@@ -252,7 +280,8 @@ final class WorkspaceStore: ObservableObject {
                 $0.endAt = carry.endAt
             }
         }
-        persist(&agg, at: idx)
+        let saved = persist(&agg, at: idx)
+        if saved && !wasAssigned { clearCompletedDay(day) }
     }
 
     func startEntry(taskId: UUID, entryId: UUID) {
@@ -327,12 +356,29 @@ final class WorkspaceStore: ObservableObject {
 
     // MARK: - private
 
-    private func persist(_ agg: inout TaskAggregate, at idx: Int) {
+    private func clearCompletedDay(_ day: Day) {
+        guard completedDays.contains(day) else { return }
+        completedDays.remove(day)
+        saveCompletedDays()
+    }
+
+    private func saveCompletedDays() {
+        do {
+            try repo.saveCompletedDays(completedDays)
+        } catch {
+            lastError = "Save completed days failed: \(error.localizedDescription)"
+        }
+    }
+
+    @discardableResult
+    private func persist(_ agg: inout TaskAggregate, at idx: Int) -> Bool {
         do {
             try repo.save(&agg)
             tasks[idx] = agg
+            return true
         } catch {
             lastError = "Save failed: \(error.localizedDescription)"
+            return false
         }
     }
 

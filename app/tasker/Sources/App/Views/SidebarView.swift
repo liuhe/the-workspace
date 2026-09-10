@@ -47,7 +47,8 @@ struct SidebarView: View {
         }
         .sheet(isPresented: $showingDayPickerForFilter) {
             DayPickerSheet(isPresented: $showingDayPickerForFilter,
-                           daysWithTasks: store.daysWithTasks) { day in
+                           daysWithTasks: store.daysWithTasks,
+                           completedDays: store.completedDays) { day in
                 store.dayFilter = .day(day)
             }
         }
@@ -103,7 +104,9 @@ private struct PushToDaySheet: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Push \(uncompletedCount) uncompleted task\(uncompletedCount == 1 ? "" : "s") from \(sourceDay.descriptionWithWeekday) to another day")
                 .font(.headline)
-            MiniCalendarView(selectedDate: $date, daysWithTasks: store.daysWithTasks)
+            MiniCalendarView(selectedDate: $date,
+                             daysWithTasks: store.daysWithTasks,
+                             completedDays: store.completedDays)
                 .frame(width: 320)
             HStack {
                 Spacer()
@@ -136,6 +139,10 @@ private struct FilterMenu: View {
             backlogItem
             if case .day(let d) = store.dayFilter {
                 Divider()
+                Toggle("Day completed", isOn: Binding(
+                    get: { store.isDayCompleted(d) },
+                    set: { store.setDayCompleted(d, isCompleted: $0) }
+                ))
                 Button("Push uncompleted to another day…") { pushingFromDay = d }
             }
         } label: {
@@ -151,7 +158,7 @@ private struct FilterMenu: View {
     private var label: String {
         switch store.dayFilter {
         case .backlog: return "Backlog"
-        case .day(let d): return d.descriptionWithWeekday
+        case .day(let d): return dayLabel(d)
         }
     }
 
@@ -160,16 +167,20 @@ private struct FilterMenu: View {
         return Day(date: d)
     }
 
-    /// 菜单项：Toggle 让选中日呈现原生勾选态；今天前缀 ★；有任务的日子后缀 ●
+    /// 菜单项：Toggle 让选中日呈现原生勾选态；今天前缀 ★；有任务的日子后缀 ●；已完成日子后缀 ✓
     @ViewBuilder
     private func dayItem(day: Day) -> some View {
-        let isToday = day == Day.today()
-        let hasTasks = store.daysWithTasks.contains(day)
-        let text = (isToday ? "★ " : "") + day.descriptionWithWeekday + (hasTasks ? " ●" : "")
-        Toggle(text, isOn: Binding(
+        Toggle(dayLabel(day), isOn: Binding(
             get: { store.dayFilter == .day(day) },
             set: { if $0 { store.dayFilter = .day(day) } }
         ))
+    }
+
+    private func dayLabel(_ day: Day) -> String {
+        let isToday = day == Day.today()
+        let hasTasks = store.daysWithTasks.contains(day)
+        let isCompleted = store.isDayCompleted(day)
+        return (isToday ? "★ " : "") + day.descriptionWithWeekday + (hasTasks ? " ●" : "") + (isCompleted ? " ✓" : "")
     }
 
     @ViewBuilder
@@ -249,20 +260,25 @@ struct DayPickerSheet: View {
     @Binding var isPresented: Bool
     @State private var date: Date = Date()
     let daysWithTasks: Set<Day>
+    let completedDays: Set<Day>
     let onPick: (Day) -> Void
 
     init(isPresented: Binding<Bool>,
          daysWithTasks: Set<Day> = [],
+         completedDays: Set<Day> = [],
          onPick: @escaping (Day) -> Void) {
         self._isPresented = isPresented
         self.daysWithTasks = daysWithTasks
+        self.completedDays = completedDays
         self.onPick = onPick
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Choose date").font(.headline)
-            MiniCalendarView(selectedDate: $date, daysWithTasks: daysWithTasks)
+            MiniCalendarView(selectedDate: $date,
+                             daysWithTasks: daysWithTasks,
+                             completedDays: completedDays)
                 .frame(width: 320)
             HStack {
                 Spacer()
@@ -292,10 +308,14 @@ private struct GroupedTaskList: View {
         }
         .listStyle(.sidebar)
         .sheet(item: sheetBinding) { wrap in
-            DayPickerSheet(isPresented: Binding(
-                get: { addingDayFor != nil },
-                set: { if !$0 { addingDayFor = nil } }
-            ), daysWithTasks: store.daysWithTasks) { day in
+            DayPickerSheet(
+                isPresented: Binding(
+                    get: { addingDayFor != nil },
+                    set: { if !$0 { addingDayFor = nil } }
+                ),
+                daysWithTasks: store.daysWithTasks,
+                completedDays: store.completedDays
+            ) { day in
                 store.addToDay(id: wrap.id, day: day)
             }
         }
@@ -401,12 +421,13 @@ private struct TaskContextMenu: View {
         }
     }
 
-    /// Add-to 菜单项：今天前缀 ★；任务已归属的日子后缀 ●；再点已归属日为幂等（upsertDay）
+    /// Add-to 菜单项：今天前缀 ★；任务已归属的日子后缀 ●；已完成日子后缀 ✓；再点已归属日为幂等（upsertDay）
     @ViewBuilder
     private func addToDayItem(day: Day) -> some View {
         let isToday = day == Day.today()
         let already = aggregate.meta.membership.days.contains(day)
-        let text = (isToday ? "★ " : "") + day.descriptionWithWeekday + (already ? " ●" : "")
+        let isCompleted = store.isDayCompleted(day)
+        let text = (isToday ? "★ " : "") + day.descriptionWithWeekday + (already ? " ●" : "") + (isCompleted ? " ✓" : "")
         Button(text) { store.addToDay(id: aggregate.id, day: day) }
     }
 
