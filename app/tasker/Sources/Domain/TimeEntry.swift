@@ -15,19 +15,23 @@ public struct TimeEntry: Codable, Hashable, Identifiable, Sendable {
     public var startAt: Date?
     public var endAt: Date?
     public var marker: Marker?
+    /// 手动填写的实际占用分钟数；nil = 用 endAt - startAt 计算
+    public var actualMinutes: Int?
 
     public init(id: UUID = UUID(),
                 title: String = "",
                 workTypeId: UUID? = nil,
                 startAt: Date? = nil,
                 endAt: Date? = nil,
-                marker: Marker? = nil) {
+                marker: Marker? = nil,
+                actualMinutes: Int? = nil) {
         self.id = id
         self.title = title
         self.workTypeId = workTypeId
         self.startAt = startAt
         self.endAt = endAt
         self.marker = marker
+        self.actualMinutes = actualMinutes
     }
 
     public var isOpen: Bool { startAt != nil && endAt == nil }
@@ -36,6 +40,12 @@ public struct TimeEntry: Codable, Hashable, Identifiable, Sendable {
     public var duration: TimeInterval? {
         guard let s = startAt, let e = endAt else { return nil }
         return e.timeIntervalSince(s)
+    }
+
+    /// 实际占用：手动填了分钟数就用它（即使没有起止时间），否则用起止时间差
+    public var effectiveDuration: TimeInterval? {
+        if let m = actualMinutes { return TimeInterval(m) * 60 }
+        return duration
     }
 }
 
@@ -52,6 +62,11 @@ extension TimeEntry {
         guard let s = startAt(inDay: day, calendar: calendar),
               let e = endAt(inDay: day, calendar: calendar) else { return nil }
         return e.timeIntervalSince(s)
+    }
+    /// 实际占用（按天锚定版本）：手动分钟数优先，否则起止时间差
+    public func effectiveDuration(inDay day: Day, calendar: Calendar = .current) -> TimeInterval? {
+        if let m = actualMinutes { return TimeInterval(m) * 60 }
+        return duration(inDay: day, calendar: calendar)
     }
     private static func combine(day: Day, time: Date?, calendar: Calendar) -> Date? {
         guard let time else { return nil }

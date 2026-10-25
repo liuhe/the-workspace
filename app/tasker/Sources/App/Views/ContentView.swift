@@ -10,7 +10,7 @@ struct ContentView: View {
                 .frame(minWidth: 240)
         } detail: {
             if store.selectedTask != nil {
-                TaskDetailView()
+                TaskDetailView(context: store.contextFilter)
             } else {
                 ContentUnavailableView("Select a task", systemImage: "text.append",
                                        description: Text("Select from sidebar or create new"))

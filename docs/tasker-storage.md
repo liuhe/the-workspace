@@ -116,6 +116,7 @@ tasker 的数据全部落在本地磁盘上。默认根目录 `~/Documents/taske
 | `startAt` | ISO8601 (ms)? | 开始时间；`null` = 已建但未开始 |
 | `endAt` | ISO8601 (ms)? | 结束时间；`null` = 还没结束（进行中） |
 | `marker` | String? | `done` / `restart` / `null` |
+| `actualMinutes` | Int? | 手动填写的实际占用分钟数；缺失 = 实际占用按 `endAt - startAt` 计算。统计 / 甘特图的时长汇总都用"实际占用" |
 
 `TimeEntry` 不再存 `taskId`：它的归属由所在的 `TaskMeta.membership.dayAssignments[].entries[]` 决定。
 

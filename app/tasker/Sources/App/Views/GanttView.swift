@@ -38,8 +38,8 @@ struct VisibleRange: Equatable {
         return TimeInterval(dx / width) * span
     }
 
-    /// 自动范围：覆盖当天所有记录，前后各留 1 小时；无记录默认 08–19
-    static func auto(for rows: [GanttTaskRow]) -> VisibleRange {
+    /// 自动范围：覆盖当天所有记录（今天还要包含"现在"），前后各留 1 小时；无记录默认 08–19
+    static func auto(for rows: [GanttTaskRow], nowOffset: TimeInterval?) -> VisibleRange {
         var lo: TimeInterval = .infinity
         var hi: TimeInterval = -.infinity
         for row in rows {
@@ -47,6 +47,10 @@ struct VisibleRange: Equatable {
                 lo = min(lo, item.start)
                 hi = max(hi, item.end)
             }
+        }
+        if let nowOffset {
+            lo = min(lo, nowOffset)
+            hi = max(hi, nowOffset)
         }
         guard lo.isFinite, hi.isFinite else { return VisibleRange(startHour: 8, endHour: 19) }
         let s = max(0, Int(floor(lo / 3600)) - 1)
@@ -72,8 +76,9 @@ struct GanttTaskRow: Identifiable {
     let timed: [GanttTimedEntry]
     var id: UUID { task.id }
 
+    /// 当天实际占用合计：每条记录手动分钟数优先，否则起止时间差
     var total: TimeInterval {
-        task.entries(inDay: day).compactMap { $0.duration(inDay: day) }.reduce(0, +)
+        task.entries(inDay: day).compactMap { $0.effectiveDuration(inDay: day) }.reduce(0, +)
     }
 
     init(task: TaskAggregate, day: Day, now: Date) {
@@ -133,6 +138,12 @@ struct GanttView: View {
     @State private var manualRange: VisibleRange?
     @State private var selection: GanttSelection?
     @State private var showingNewTaskSheet = false
+    /// 开启后：有多条已开始记录的任务，每条记录单独占一行（任务行留空用于新建）
+    @AppStorage("tasker.gantt.rowPerEntry") private var rowPerEntry = false
+    /// 开启后：选中任务时窗口下方变成任务详情编辑区（默认占 1/3，可拖动分隔条调整）
+    @AppStorage("tasker.gantt.detailPane") private var detailPane = false
+    @AppStorage("tasker.gantt.detailPaneFraction") private var detailPaneFraction: Double = 1.0 / 3.0
+    @State private var dragStartFraction: Double?
 
     private var day: Day { Day(date: date) }
 
@@ -145,40 +156,107 @@ struct GanttView: View {
     @ViewBuilder
     private func content(now: Date) -> some View {
         let groups = GanttBuilder.build(tasks: store.tasks, settings: store.settings, day: day, now: now)
-        let range = manualRange ?? VisibleRange.auto(for: groups.flatMap(\.rows))
+        let range = manualRange ?? VisibleRange.auto(for: groups.flatMap(\.rows), nowOffset: nowOffset(now))
+        let dayTotal = groups.flatMap(\.rows).reduce(0) { $0 + $1.total }
+        GeometryReader { geo in
         VStack(spacing: 0) {
-            header(range: range)
+            header(range: range, dayTotal: dayTotal)
             Divider()
             if groups.isEmpty {
                 Spacer()
                 Text("No tasks on this day.").foregroundStyle(.secondary)
                 Spacer()
             } else {
-                GanttRulerRow(range: range, nowOffset: nowOffset(now))
-                    .padding(.horizontal, 16)
-                    .padding(.top, 4)
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 0) {
-                        ForEach(groups) { group in
-                            GanttCategoryHeader(group: group)
-                            ForEach(group.rows) { row in
-                                GanttTaskRowView(row: row, range: range, def: group.def, slot: group.slot,
-                                                 nowOffset: nowOffset(now), selection: $selection)
+                VStack(spacing: 0) {
+                    GanttRulerRow(range: range, nowOffset: nowOffset(now))
+                        .padding(.horizontal, 16)
+                        .padding(.top, 4)
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 0) {
+                            ForEach(groups) { group in
+                                GanttCategoryHeader(group: group)
+                                ForEach(group.rows) { row in
+                                    if rowPerEntry && row.timed.count > 1 {
+                                        // 任务行留空（可拖出新记录），每条记录各占一行
+                                        GanttTaskRowView(row: row, items: [], range: range,
+                                                         def: group.def, slot: group.slot, selection: $selection)
+                                        ForEach(row.timed) { item in
+                                            GanttEntryRowView(row: row, item: item, range: range,
+                                                              def: group.def, slot: group.slot, selection: $selection)
+                                        }
+                                    } else {
+                                        GanttTaskRowView(row: row, items: row.timed, range: range,
+                                                         def: group.def, slot: group.slot, selection: $selection)
+                                    }
+                                }
                             }
                         }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 6)
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 6)
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
                 }
+                // 今天：一条贯穿刻度和所有行的"现在"竖线
+                .overlay { GanttNowLine(range: range, nowOffset: nowOffset(now)) }
             }
-            Divider()
-            GanttInspector(day: day, selection: $selection)
+            if detailPane, let taskId = selectedTaskIdForDetail {
+                // 可拖动的分隔条 + 任务详情面板
+                PaneDivider(onDrag: { dy in resizePane(by: dy, totalHeight: geo.size.height) },
+                            onEnded: { dragStartFraction = nil })
+                detailPaneView(taskId: taskId)
+                    .frame(height: paneHeight(totalHeight: geo.size.height))
+            } else {
+                Divider()
+                GanttInspector(day: day, selection: $selection)
+            }
+        }
         }
         .onChange(of: date) { _, _ in
             manualRange = nil
             selection = nil
         }
+        .onChange(of: selection) { _, new in syncStoreSelection(new) }
+        .onChange(of: detailPane) { _, _ in syncStoreSelection(selection) }
+    }
+
+    // MARK: - 详情面板
+
+    private var selectedTaskIdForDetail: UUID? {
+        if case .task(let id) = selection { return id }
+        return nil
+    }
+
+    /// 详情面板复用主窗口的 TaskDetailView，它读 store.selectedTask；这里把甘特图的选中同步进 store
+    private func syncStoreSelection(_ sel: GanttSelection?) {
+        guard detailPane, case .task(let id) = sel else { return }
+        if store.selectedTaskId != id || store.selectedContext != .day(day) {
+            store.selectTask(id: id, context: .day(day))
+        }
+    }
+
+    @ViewBuilder
+    private func detailPaneView(taskId: UUID) -> some View {
+        if store.selectedTaskId == taskId {
+            ScrollView {
+                TaskDetailView(context: .day(day))
+            }
+        } else {
+            Color.clear.onAppear { syncStoreSelection(.task(taskId)) }
+        }
+    }
+
+    private func paneHeight(totalHeight: CGFloat) -> CGFloat {
+        let f = min(max(detailPaneFraction, 0.15), 0.8)
+        return max(120, totalHeight * CGFloat(f))
+    }
+
+    private func resizePane(by translation: CGFloat, totalHeight: CGFloat) {
+        guard totalHeight > 0 else { return }
+        if dragStartFraction == nil { dragStartFraction = detailPaneFraction }
+        let start = dragStartFraction ?? detailPaneFraction
+        // 分隔条往上拖 → 面板变高
+        let f = start - Double(translation / totalHeight)
+        detailPaneFraction = min(max(f, 0.15), 0.8)
     }
 
     private func nowOffset(_ now: Date) -> TimeInterval? {
@@ -187,7 +265,7 @@ struct GanttView: View {
     }
 
     @ViewBuilder
-    private func header(range: VisibleRange) -> some View {
+    private func header(range: VisibleRange, dayTotal: TimeInterval) -> some View {
         HStack(spacing: 12) {
             Text("Gantt").font(.title2)
             HStack(spacing: 4) {
@@ -211,6 +289,14 @@ struct GanttView: View {
                 }
             }
             Spacer()
+            Toggle("Row per entry", isOn: $rowPerEntry)
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .help("Tasks with several entries show one row per entry")
+            Toggle("Detail pane", isOn: $detailPane)
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .help("When a task is selected, edit its full details in a resizable pane below")
             HStack(spacing: 6) {
                 Text("Hours").foregroundStyle(.secondary)
                 Stepper(value: Binding(
@@ -232,6 +318,13 @@ struct GanttView: View {
                     .disabled(manualRange == nil)
             }
             .controlSize(.small)
+            // 当天所有任务实际占用加总，与右侧时长列对齐
+            HStack(spacing: 4) {
+                Text("Total").font(.caption).foregroundStyle(.secondary)
+                Text(StatsFormat.duration(dayTotal))
+                    .font(.system(.body, design: .monospaced).weight(.semibold))
+            }
+            .frame(minWidth: GanttLayout.durationWidth, alignment: .trailing)
         }
         .padding(16)
     }
@@ -332,18 +425,19 @@ private struct GanttCategoryHeader: View {
 private struct GanttTaskRowView: View {
     @Environment(\.colorScheme) private var scheme
     let row: GanttTaskRow
+    /// 这一行要画的记录；"每条记录一行"模式下任务行传空数组
+    let items: [GanttTimedEntry]
     let range: VisibleRange
     let def: CategoryDef
     let slot: Int?
-    let nowOffset: TimeInterval?
     @Binding var selection: GanttSelection?
 
     var body: some View {
         HStack(spacing: GanttLayout.columnSpacing) {
             label.frame(width: GanttLayout.labelWidth, alignment: .leading)
-            GanttTrack(row: row, range: range,
+            GanttTrack(row: row, items: items, range: range,
                        color: CategoryColor.resolve(def: def, slot: slot, scheme: scheme),
-                       nowOffset: nowOffset, selection: $selection)
+                       selection: $selection)
                 .frame(maxWidth: .infinity)
             Text(StatsFormat.duration(row.total))
                 .font(.system(.callout, design: .monospaced))
@@ -394,6 +488,40 @@ private struct GanttTaskRowView: View {
     }
 }
 
+// MARK: - 记录行（"每条记录一行"模式）：[起止时间] [只画这一条的时间轴] [这一条的实际占用]
+
+private struct GanttEntryRowView: View {
+    @Environment(\.colorScheme) private var scheme
+    let row: GanttTaskRow
+    let item: GanttTimedEntry
+    let range: VisibleRange
+    let def: CategoryDef
+    let slot: Int?
+    @Binding var selection: GanttSelection?
+
+    var body: some View {
+        HStack(spacing: GanttLayout.columnSpacing) {
+            HStack(spacing: 4) {
+                Spacer().frame(width: 36)
+                Text("\(TimelineGrid.label(item.start)) – \(item.isOpen ? "…" : TimelineGrid.label(item.end))")
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+            }
+            .frame(width: GanttLayout.labelWidth, alignment: .leading)
+            GanttTrack(row: row, items: [item], range: range,
+                       color: CategoryColor.resolve(def: def, slot: slot, scheme: scheme),
+                       selection: $selection)
+                .frame(maxWidth: .infinity)
+            Text(item.entry.effectiveDuration(inDay: row.day).map(StatsFormat.duration) ?? "")
+                .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .frame(width: GanttLayout.durationWidth, alignment: .trailing)
+        }
+        .frame(height: GanttLayout.rowHeight)
+    }
+}
+
 // MARK: - 时间轴（可拖动编辑）
 
 private struct DragSession {
@@ -412,9 +540,9 @@ private struct DragSession {
 private struct GanttTrack: View {
     @EnvironmentObject var store: WorkspaceStore
     let row: GanttTaskRow
+    let items: [GanttTimedEntry]
     let range: VisibleRange
     let color: Color
-    let nowOffset: TimeInterval?
     @Binding var selection: GanttSelection?
     @State private var drag: DragSession?
 
@@ -422,11 +550,11 @@ private struct GanttTrack: View {
         GeometryReader { geo in
             let w = geo.size.width
             ZStack(alignment: .topLeading) {
-                GanttGridLines(range: range, nowOffset: nowOffset)
+                GanttGridLines(range: range)
                 Color.clear
                     .contentShape(Rectangle())
                     .gesture(createGesture(width: w))
-                ForEach(row.timed) { item in
+                ForEach(items) { item in
                     bar(for: item, width: w)
                 }
                 if let drag, drag.mode == .create {
@@ -454,7 +582,9 @@ private struct GanttTrack: View {
         let bw = max(x1 - x0, 4)
         let isSelected = selection == .entry(taskId: row.id, entryId: item.id)
         let isDragging = drag?.entryId == item.id
-        let titleText = item.entry.title.isEmpty ? "(no title)" : item.entry.title
+        let baseTitle = item.entry.title.isEmpty ? "(no title)" : item.entry.title
+        // 手动填了实际占用 → 标题前用括号标出
+        let titleText = item.entry.actualMinutes.map { "(\(StatsFormat.duration(TimeInterval($0) * 60))) \(baseTitle)" } ?? baseTitle
         // 条太窄放不下标题时，标题从条左边缘起向右书写，允许超出条本身
         let labelFits = bw > 56
         ZStack(alignment: .leading) {
@@ -636,7 +766,6 @@ private struct GanttTrack: View {
 
 private struct GanttGridLines: View {
     let range: VisibleRange
-    let nowOffset: TimeInterval?
 
     var body: some View {
         Canvas { ctx, size in
@@ -651,12 +780,31 @@ private struct GanttGridLines: View {
                     ctx.fill(Path(CGRect(x: hx - 0.5, y: 0, width: 1, height: size.height)), with: half)
                 }
             }
+        }
+    }
+}
+
+/// 覆盖在刻度 + 列表之上的"现在"竖线；x 按与行内时间轴相同的列几何计算
+private struct GanttNowLine: View {
+    let range: VisibleRange
+    let nowOffset: TimeInterval?
+
+    var body: some View {
+        GeometryReader { geo in
             if let nowOffset, nowOffset >= range.startOffset, nowOffset <= range.endOffset {
-                let x = range.x(for: nowOffset, width: w)
-                ctx.fill(Path(CGRect(x: x - 0.5, y: 0, width: 1, height: size.height)),
-                         with: .color(.red.opacity(0.7)))
+                // 行布局：16 外边距 + 标题列 + 列间距 | 时间轴 | 列间距 + 时长列 + 16 外边距
+                let left = 16 + GanttLayout.labelWidth + GanttLayout.columnSpacing
+                let right = GanttLayout.columnSpacing + GanttLayout.durationWidth + 16
+                let trackWidth = max(geo.size.width - left - right, 1)
+                let x = left + range.x(for: nowOffset, width: trackWidth)
+                let top = GanttLayout.rulerHeight + 4   // 从刻度行底部开始往下画
+                Rectangle()
+                    .fill(Color.red.opacity(0.75))
+                    .frame(width: 1.5, height: max(geo.size.height - top, 0))
+                    .offset(x: x - 0.75, y: top)
             }
         }
+        .allowsHitTesting(false)
     }
 }
 
@@ -803,6 +951,68 @@ private struct GanttInspector: View {
                 } else {
                     Text("in progress").foregroundStyle(.secondary)
                 }
+                ActualMinutesField(taskId: task.id, entry: entry)
                 closeButton
     }
 }
+
+// MARK: - 实际占用分钟数输入（空 = 用起止时间差）
+
+struct ActualMinutesField: View {
+    @EnvironmentObject var store: WorkspaceStore
+    let taskId: UUID
+    let entry: TimeEntry
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Text("Actual").font(.caption).foregroundStyle(.secondary)
+            TextField(placeholder, value: Binding<Int?>(
+                get: { entry.actualMinutes },
+                set: { new in
+                    let v = new.flatMap { $0 > 0 ? $0 : nil }
+                    store.updateEntry(taskId: taskId, entryId: entry.id) { $0.actualMinutes = v }
+                }
+            ), format: .number)
+            .textFieldStyle(.roundedBorder)
+            .controlSize(.small)
+            .multilineTextAlignment(.trailing)
+            .frame(width: 56)
+            Text("min").font(.caption).foregroundStyle(.secondary)
+        }
+        .help("Actual time spent in minutes. Leave empty to use end − start.")
+    }
+
+    /// 占位显示按起止时间算出的分钟数
+    private var placeholder: String {
+        guard let d = entry.duration else { return "–" }
+        return "\(Int(d) / 60)"
+    }
+}
+
+// MARK: - 可拖动的水平分隔条
+
+private struct PaneDivider: View {
+    let onDrag: (CGFloat) -> Void
+    let onEnded: () -> Void
+
+    var body: some View {
+        ZStack {
+            Divider()
+            Capsule()
+                .fill(Color.secondary.opacity(0.35))
+                .frame(width: 40, height: 4)
+        }
+        .frame(height: 9)
+        .frame(maxWidth: .infinity)
+        .contentShape(Rectangle())
+        .onHover { inside in
+            if inside { NSCursor.resizeUpDown.push() } else { NSCursor.pop() }
+        }
+        .gesture(
+            DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                .onChanged { onDrag($0.translation.height) }
+                .onEnded { _ in onEnded() }
+        )
+    }
+}
+

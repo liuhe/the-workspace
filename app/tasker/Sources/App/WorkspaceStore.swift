@@ -326,14 +326,16 @@ final class WorkspaceStore: ObservableObject {
 
     // MARK: - 时间记录
 
-    func addEntry(taskId: UUID, title: String = "", workTypeId: UUID? = nil) {
+    /// 新建一条未开始的记录。`context` 缺省为侧栏当前上下文；甘特图详情面板显式传入那天。
+    func addEntry(taskId: UUID, in context: TaskFilter? = nil, title: String = "", workTypeId: UUID? = nil) {
         guard let idx = tasks.firstIndex(where: { $0.id == taskId }) else { return }
         var agg = tasks[idx]
-        let day = entryDay(for: agg)
+        let ctx = context ?? contextFilter
+        let day = entryDay(for: agg, in: ctx)
         let wasAssigned = agg.meta.membership.days.contains(day)
-        let sourcePriority = agg.priority(in: contextFilter)
+        let sourcePriority = agg.priority(in: ctx)
         let shouldMarkCurrent: Bool
-        switch contextFilter {
+        switch ctx {
         case .day: shouldMarkCurrent = showCurrent
         case .backlog: shouldMarkCurrent = false
         }
@@ -485,7 +487,11 @@ final class WorkspaceStore: ObservableObject {
 
     /// 详情页展示 / 新建时间记录用的那天：上下文是某天 → 那天；Backlog → 最后一个关联日（空则今天）
     func entryDay(for agg: TaskAggregate) -> Day {
-        switch contextFilter {
+        entryDay(for: agg, in: contextFilter)
+    }
+
+    func entryDay(for agg: TaskAggregate, in context: TaskFilter) -> Day {
+        switch context {
         case .day(let d): return d
         case .backlog:
             return agg.meta.membership.dayAssignments.map(\.day).max() ?? Day.today()

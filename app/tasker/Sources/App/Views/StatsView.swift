@@ -5,8 +5,21 @@ import TaskerDomain
 
 struct DayStat: Identifiable {
     let day: Day
-    let tasks: [TaskDayStat]
+    let categories: [CategoryDayStat]
     var id: Day { day }
+    var tasks: [TaskDayStat] { categories.flatMap(\.tasks) }
+    var totalDuration: TimeInterval { categories.reduce(0) { $0 + $1.totalDuration } }
+    var ranges: [(Date, Date)] { categories.flatMap(\.ranges) }
+}
+
+/// 某天 → 某分类下的任务汇总；顺序跟随设置里的分类顺序
+struct CategoryDayStat: Identifiable {
+    let day: Day
+    let def: CategoryDef
+    /// 设置里的槽位（用于自动色）；未知 / 未设置分类为 nil
+    let slot: Int?
+    let tasks: [TaskDayStat]
+    var id: UUID { def.id }
     var totalDuration: TimeInterval { tasks.reduce(0) { $0 + $1.totalDuration } }
     var ranges: [(Date, Date)] { tasks.flatMap(\.ranges) }
 }
@@ -16,8 +29,9 @@ struct TaskDayStat: Identifiable {
     let task: TaskAggregate
     let entries: [TimeEntry]
     var id: UUID { task.id }
+    /// 实际占用：手动分钟数优先，否则起止时间差
     var totalDuration: TimeInterval {
-        entries.compactMap { $0.duration(inDay: day) }.reduce(0, +)
+        entries.compactMap { $0.effectiveDuration(inDay: day) }.reduce(0, +)
     }
     var ranges: [(Date, Date)] {
         entries.compactMap { e in
@@ -31,6 +45,7 @@ enum StatsBuilder {
     /// 按 (day assignment, task) 汇总时间记录；日期升序。
     /// `range` 非 nil 时只保留落在闭区间内的 day assignments。
     static func build(from tasks: [TaskAggregate],
+                      categories: [CategoryDef],
                       range: ClosedRange<Day>? = nil,
                       calendar: Calendar = .current) -> [DayStat] {
         var byDay: [Day: [UUID: [TimeEntry]]] = [:]
@@ -50,7 +65,15 @@ enum StatsBuilder {
                 }
                 return TaskDayStat(day: day, task: taskById[tid]!, entries: sorted)
             }.sorted { $0.totalDuration > $1.totalDuration }
-            return DayStat(day: day, tasks: stats)
+            // 按分类分组（顺序跟设置），组内保持时长降序
+            let statByTask = Dictionary(uniqueKeysWithValues: stats.map { ($0.task.id, $0) })
+            let grouped = TaskQueries.groupByCategory(stats.map(\.task), categories: categories)
+            let cats: [CategoryDayStat] = grouped.map { (def, ts) in
+                CategoryDayStat(day: day, def: def,
+                                slot: categories.firstIndex(where: { $0.id == def.id }),
+                                tasks: ts.compactMap { statByTask[$0.id] })
+            }
+            return DayStat(day: day, categories: cats)
         }
     }
 }
@@ -114,6 +137,7 @@ struct GanttBar: View {
 
 enum StatsRowID: Hashable {
     case day(Day)
+    case category(Day, UUID)
     case task(Day, UUID)
     case entry(UUID)
 }
@@ -167,7 +191,7 @@ struct StatsView: View {
         let s = Day(date: startDate)
         let e = Day(date: endDate)
         let range = s <= e ? s...e : e...s
-        return StatsBuilder.build(from: store.tasks, range: range)
+        return StatsBuilder.build(from: store.tasks, categories: store.settings.categories, range: range)
     }
 
     private static func defaultStartDate() -> Date {
@@ -262,11 +286,41 @@ private struct DayBlock: View {
             duration: day.totalDuration
         )
         if expanded {
-            ForEach(day.tasks) {
-                TaskBlock(dayContext: day.day, task: $0, editing: editing, selection: $selection)
+            ForEach(day.categories) {
+                CategoryBlock(dayContext: day.day, category: $0, editing: editing, selection: $selection)
             }
         }
         Divider().padding(.vertical, 4)
+    }
+}
+
+private struct CategoryBlock: View {
+    @Environment(\.colorScheme) private var scheme
+    let dayContext: Day
+    let category: CategoryDayStat
+    let editing: Bool
+    @Binding var selection: StatsRowID?
+    @State private var expanded = true
+
+    var body: some View {
+        StatsRow(
+            rowID: .category(dayContext, category.def.id),
+            selection: $selection,
+            indent: 24,
+            expandable: .binding($expanded, enabled: !category.tasks.isEmpty),
+            label: category.def.name,
+            labelFont: .body.weight(.semibold),
+            timeCell: .none,
+            day: dayContext,
+            ranges: category.ranges,
+            color: CategoryColor.resolve(def: category.def, slot: category.slot, scheme: scheme),
+            duration: category.totalDuration
+        )
+        if expanded {
+            ForEach(category.tasks) {
+                TaskBlock(dayContext: dayContext, task: $0, editing: editing, selection: $selection)
+            }
+        }
     }
 }
 
@@ -281,7 +335,7 @@ private struct TaskBlock: View {
         StatsRow(
             rowID: .task(dayContext, task.task.id),
             selection: $selection,
-            indent: 24,
+            indent: 48,
             expandable: .binding($expanded, enabled: !task.entries.isEmpty),
             label: task.task.meta.title.isEmpty ? "(Untitled)" : task.task.meta.title,
             labelFont: .body,
@@ -317,7 +371,7 @@ private struct EntryRow: View {
         StatsRow(
             rowID: .entry(entry.id),
             selection: $selection,
-            indent: 48,
+            indent: 72,
             expandable: .none,
             label: entry.title.isEmpty ? "(no title)" : entry.title,
             labelFont: .callout,
@@ -326,7 +380,7 @@ private struct EntryRow: View {
             day: dayContext,
             ranges: range,
             color: .blue,
-            duration: entry.duration(inDay: dayContext) ?? 0
+            duration: entry.effectiveDuration(inDay: dayContext) ?? 0
         )
     }
 

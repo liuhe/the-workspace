@@ -1,17 +1,20 @@
 import SwiftUI
 import TaskerDomain
 
+/// 任务详情。`context` 决定状态徽章 / 优先级控件 / 时间记录列表针对哪一天；
+/// 主窗口传 `store.contextFilter`，甘特图详情面板传它正在看的那天。
 struct TaskDetailView: View {
     @EnvironmentObject var store: WorkspaceStore
+    let context: TaskFilter
 
     var body: some View {
         if let agg = store.selectedTask {
             VStack(alignment: .leading, spacing: 12) {
-                MembershipBar(aggregate: agg)
+                MembershipBar(aggregate: agg, context: context)
                 Divider()
-                TaskInfoSection(aggregate: agg)
+                TaskInfoSection(aggregate: agg, context: context)
                 Divider()
-                EntriesSection(aggregate: agg)
+                EntriesSection(aggregate: agg, context: context)
                 Spacer(minLength: 0)
             }
             .padding(16)
@@ -24,6 +27,7 @@ struct TaskDetailView: View {
 private struct MembershipBar: View {
     @EnvironmentObject var store: WorkspaceStore
     let aggregate: TaskAggregate
+    let context: TaskFilter
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
@@ -42,7 +46,7 @@ private struct MembershipBar: View {
 
     /// 右侧控件永远针对当前上下文的日期；上下文是 Backlog 或任务不在那天 → 隐藏
     private var filterDay: Day? {
-        if case .day(let d) = store.contextFilter,
+        if case .day(let d) = context,
            aggregate.meta.membership.days.contains(d) {
             return d
         }
@@ -51,7 +55,7 @@ private struct MembershipBar: View {
 
     /// 下拉 label 显示的"当前那天"：上下文是某天 → 那天；Backlog → 最后一个 assignment（空则 today）
     private var effectiveDay: Day {
-        store.entryDay(for: aggregate)
+        store.entryDay(for: aggregate, in: context)
     }
 
     // MARK: - 关联日期只读下拉
@@ -133,6 +137,7 @@ private struct TaskInfoSection: View {
     @EnvironmentObject var store: WorkspaceStore
     @State private var debounce: Task<Void, Never>?
     let aggregate: TaskAggregate
+    let context: TaskFilter
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -195,7 +200,7 @@ private struct TaskInfoSection: View {
         .border(Color.secondary.opacity(0.2))
     }
 
-    private var contextualStatus: TaskStatus { aggregate.status(in: store.contextFilter) }
+    private var contextualStatus: TaskStatus { aggregate.status(in: context) }
 
     private var statusBadge: some View {
         HStack(spacing: 4) {
@@ -232,6 +237,7 @@ private struct TaskInfoSection: View {
 private struct EntriesSection: View {
     @EnvironmentObject var store: WorkspaceStore
     let aggregate: TaskAggregate
+    let context: TaskFilter
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -239,7 +245,7 @@ private struct EntriesSection: View {
                 Text("Time entries · \(entryDay.descriptionWithWeekday)").font(.headline)
                 Spacer()
                 Button {
-                    store.addEntry(taskId: aggregate.id)
+                    store.addEntry(taskId: aggregate.id, in: context)
                 } label: {
                     Label("Add", systemImage: "plus.circle")
                 }
@@ -261,7 +267,7 @@ private struct EntriesSection: View {
     }
 
     private var entryDay: Day {
-        store.entryDay(for: aggregate)
+        store.entryDay(for: aggregate, in: context)
     }
 }
 
@@ -360,7 +366,9 @@ private struct EntryRow: View {
                 .fixedSize()
             }
 
-            if let d = entry.duration {
+            ActualMinutesField(taskId: taskId, entry: entry)
+
+            if let d = entry.effectiveDuration {
                 Text(formatDuration(d))
                     .font(.caption2)
                     .foregroundStyle(.secondary)

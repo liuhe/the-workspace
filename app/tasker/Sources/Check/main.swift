@@ -442,6 +442,36 @@ check("SettingsLookup resolves workType by id") {
     try expectEqual(SettingsLookup.workTypeName(nil, in: [wt]), "(Unset)")
 }
 
+// MARK: - TimeEntry 实际占用
+
+check("effectiveDuration: manual minutes win over start/end, fall back to end - start") {
+    let day = Day(year: 2026, month: 3, day: 15)
+    let s = TimelineGrid.date(atOffset: 9 * 3600, inDay: day)
+    let e = TimelineGrid.date(atOffset: 10 * 3600, inDay: day)
+    let computed = TimeEntry(startAt: s, endAt: e)
+    try expectEqual(computed.effectiveDuration, 3600)
+    try expectEqual(computed.effectiveDuration(inDay: day), 3600)
+    let manual = TimeEntry(startAt: s, endAt: e, actualMinutes: 45)
+    try expectEqual(manual.effectiveDuration, 45 * 60)
+    try expectEqual(manual.effectiveDuration(inDay: day), 45 * 60)
+    // 没有起止时间但填了分钟数 → 仍算占用
+    let onlyManual = TimeEntry(actualMinutes: 20)
+    try expectEqual(onlyManual.duration, nil)
+    try expectEqual(onlyManual.effectiveDuration, 20 * 60)
+    try expectEqual(TimeEntry().effectiveDuration, nil)
+}
+
+check("TimeEntry actualMinutes roundtrips; missing key decodes as nil") {
+    let enc = JSONEncoder(), dec = JSONDecoder()
+    let withActual = TimeEntry(title: "x", actualMinutes: 30)
+    let back = try dec.decode(TimeEntry.self, from: try enc.encode(withActual))
+    try expectEqual(back.actualMinutes, 30)
+    let legacy = """
+    {"id":"\(UUID().uuidString)","title":"old"}
+    """.data(using: .utf8)!
+    try expectEqual(try dec.decode(TimeEntry.self, from: legacy).actualMinutes, nil)
+}
+
 // MARK: - TimelineGrid（甘特图 5 分钟刻度）
 
 check("TimelineGrid.snap rounds to 5-minute grid and clamps to the day") {

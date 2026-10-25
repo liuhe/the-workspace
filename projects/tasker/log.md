@@ -369,3 +369,36 @@
 
 - 今天甘特图相关全部改动（窗口、TimelineGrid、选中 / 编辑、新建按钮上移、分类颜色设置）合为一个 commit 提交到 main；本机未提交的两处 `.claude/skills/aie-*` 删除不属于本次工作，未纳入
 
+## 2026-10-25 时间记录"实际占用"
+
+- 模型：`TimeEntry.actualMinutes: Int?`；`effectiveDuration` / `effectiveDuration(inDay:)` = 手动分钟数优先，否则起止差；只填分钟数没填起止也算占用
+- 甘特图：任务行右侧合计、标题行最右 Total 都按实际占用；色块标题前 `(45m)` 括号前缀；选中记录的底部编辑条加 Actual 分钟输入（占位显示按起止算出的分钟数，清空 = 回退计算）
+- 详情页记录行加同一个 `ActualMinutesField`，右侧时长改显示实际占用；统计窗口的任务 / 天合计与记录时长也改为实际占用（保持三处一致）
+- 存储文档加 `actualMinutes` 字段；Check 新增 2 个用例（优先级规则、JSON 往返 + 旧数据缺字段），44/44 通过
+- build 通过；已重启本机 app；未提交
+
+## 2026-10-25 统计加分类层级 + 甘特图连续"现在"线
+
+- 统计：`DayStat.categories: [CategoryDayStat]`，`StatsBuilder.build` 接收设置里的分类，复用 `TaskQueries.groupByCategory`；新增 `CategoryBlock` 行（缩进 24，任务 48、记录 72），分类行颜色走 `CategoryColor`
+- 甘特图：原来"现在"线是每行 Canvas 各画一段（分类标题处断开，且 22 点时自动范围只到记录末尾所以看不见）。改为 `GanttNowLine` 覆盖层，从刻度底部贯穿整个列表区域，列几何与行布局常量一致；今天的自动可见范围包含"现在"
+- build 通过；已重启本机 app；未提交
+
+## 2026-10-25 甘特图 Row per entry 模式
+
+- 标题行加 `Row per entry` 开关（`@AppStorage("tasker.gantt.rowPerEntry")`）
+- `GanttTrack` 增加 `items` 参数（这一行画哪些记录）；`GanttTaskRowView` 透传；新增 `GanttEntryRowView`（左侧起止时间、只画一条、右侧该条实际占用）
+- 列表渲染：开关开且 `row.timed.count > 1` → 任务行 `items: []` + 每条记录一行；否则原样。新建 / 拖动 / 选中逻辑不变，新记录由数据驱动自然成为新行
+- build 通过；已重启本机 app；未提交
+
+## 2026-10-25 甘特图 Detail pane 模式
+
+- `TaskDetailView` 改为接收显式 `context: TaskFilter`（Membership / Info / Entries 三段透传），不再直接读 `store.contextFilter`；`ContentView` 传 `store.contextFilter`
+- Store：`addEntry(taskId:in:...)` 与 `entryDay(for:in:)` 增加显式上下文版本，原签名委托
+- 甘特图：`Detail pane` 开关 + `detailPaneFraction`（默认 1/3，夹在 0.15–0.8，AppStorage 记忆）；选中任务且开关开 → 底部 `PaneDivider`（可拖、resizeUpDown 光标）+ `ScrollView { TaskDetailView(context: .day(day)) }`；选中同步调用 `store.selectTask(id:context:)` 以加载描述
+- 过程：第一轮脚本在 TaskInfoSection 匹配失败中断（该 struct 多一个 `@State debounce` 行），分段重跑后通过
+- build 通过；已重启本机 app；未提交
+
+## 2026-10-25 提交（第二批）
+
+- 实际占用、统计分类层级、连续"现在"线、Row per entry、Detail pane 合为一个 commit 提交到 main；`.claude/skills/aie-*` 删除仍未纳入
+
