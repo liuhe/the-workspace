@@ -196,14 +196,23 @@ final class WorkspaceStore: ObservableObject {
 
     // MARK: - 任务
 
+    /// 侧栏新建：归属跟随当前范围（某天 → 加入那天；Backlog / 所有日期 → 不归属任何天）
     func createTask(title: String) {
+        var day: Day?
+        if case .day(let d) = scope { day = d }
+        createTask(title: title, inDay: day, isCurrent: showCurrent)
+    }
+
+    /// 显式指定归属日（甘特图窗口用）；`day` 为 nil 时不归属任何天。返回新任务 id，失败返回 nil。
+    @discardableResult
+    func createTask(title: String, inDay day: Day?, isCurrent: Bool = false) -> UUID? {
         let trimmed = title.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { return }
+        guard !trimmed.isEmpty else { return nil }
         var meta = TaskMeta(title: trimmed, categoryId: nil)
         var addedDay: Day?
-        if case .day(let d) = scope {
+        if let d = day {
             meta.membership.dayAssignments.append(
-                DayAssignment(day: d, priority: .normal, isCurrent: showCurrent)
+                DayAssignment(day: d, priority: .normal, isCurrent: isCurrent)
             )
             addedDay = d
         }
@@ -215,8 +224,10 @@ final class WorkspaceStore: ObservableObject {
             selectedTaskId = agg.id
             selectedContext = addedDay.map { .day($0) } ?? .backlog
             currentDescription = ""
+            return agg.id
         } catch {
             lastError = "Create failed: \(error.localizedDescription)"
+            return nil
         }
     }
 
@@ -368,6 +379,35 @@ final class WorkspaceStore: ObservableObject {
         var agg = tasks[idx]
         agg.updateEntry(id: entryId, mutate: mutate)
         persist(&agg, at: idx)
+    }
+
+    /// 甘特图：设置某条记录在 `day` 上的起止时间（以当天秒偏移表示，已由 TimelineGrid 吸附）
+    func setEntryRange(taskId: UUID, entryId: UUID, inDay day: Day, start: TimeInterval, end: TimeInterval?) {
+        updateEntry(taskId: taskId, entryId: entryId) { e in
+            e.startAt = TimelineGrid.date(atOffset: start, inDay: day)
+            if let end { e.endAt = TimelineGrid.date(atOffset: end, inDay: day) }
+        }
+    }
+
+    /// 甘特图：在 `day` 的空白处拖出一段时间。优先填入该天尚未开始的记录；没有则新建一条。
+    func addTimedEntry(taskId: UUID, inDay day: Day, start: TimeInterval, end: TimeInterval) {
+        guard let idx = tasks.firstIndex(where: { $0.id == taskId }) else { return }
+        var agg = tasks[idx]
+        let startAt = TimelineGrid.date(atOffset: start, inDay: day)
+        let endAt = TimelineGrid.date(atOffset: end, inDay: day)
+        if let placeholder = agg.entries(inDay: day).first(where: { $0.isNotStarted }) {
+            agg.updateEntry(id: placeholder.id) { $0.startAt = startAt; $0.endAt = endAt }
+            persist(&agg, at: idx)
+            return
+        }
+        let wasAssigned = agg.meta.membership.days.contains(day)
+        let newId = agg.addEntry(inDay: day,
+                                 priority: agg.meta.membership.priority(inDay: day) ?? .normal,
+                                 isCurrent: agg.meta.membership.isCurrent(inDay: day),
+                                 workTypeId: settings.workTypes.first?.id)
+        agg.updateEntry(id: newId) { $0.startAt = startAt; $0.endAt = endAt }
+        let saved = persist(&agg, at: idx)
+        if saved && !wasAssigned { clearCompletedDay(day) }
     }
 
     func deleteEntry(taskId: UUID, entryId: UUID) {

@@ -442,6 +442,61 @@ check("SettingsLookup resolves workType by id") {
     try expectEqual(SettingsLookup.workTypeName(nil, in: [wt]), "(Unset)")
 }
 
+// MARK: - TimelineGrid（甘特图 5 分钟刻度）
+
+check("TimelineGrid.snap rounds to 5-minute grid and clamps to the day") {
+    try expectEqual(TimelineGrid.snap(10 * 3600 + 2 * 60 + 29), 10 * 3600)          // 10:02:29 → 10:00
+    try expectEqual(TimelineGrid.snap(10 * 3600 + 2 * 60 + 31), 10 * 3600 + 5 * 60) // 10:02:31 → 10:05
+    try expectEqual(TimelineGrid.snap(-300), 0)
+    try expectEqual(TimelineGrid.snap(90_000), TimelineGrid.dayLength)
+}
+
+check("TimelineGrid.move keeps duration, snaps start, stays inside the day") {
+    // 10:03 – 10:48 (45m) 右移 7 分钟 → 10:10 – 10:55
+    let r = TimelineGrid.move(start: 10 * 3600 + 3 * 60, end: 10 * 3600 + 48 * 60, by: 7 * 60)
+    try expectEqual(r.start, 10 * 3600 + 10 * 60)
+    try expectEqual(r.end - r.start, 45 * 60)
+    // 推过当天末尾 → 贴到 24:00 结束
+    let tail = TimelineGrid.move(start: 23 * 3600, end: 23 * 3600 + 30 * 60, by: 3600)
+    try expectEqual(tail.end, TimelineGrid.dayLength)
+    try expectEqual(tail.start, TimelineGrid.dayLength - 30 * 60)
+    // 推到当天开头之前 → 从 0 开始
+    let head = TimelineGrid.move(start: 600, end: 1800, by: -3600)
+    try expectEqual(head.start, 0)
+    try expectEqual(head.end, 1200)
+}
+
+check("TimelineGrid.resizeStart/End snap and keep at least one step apart") {
+    let s = 10 * 3600.0, e = 11 * 3600.0
+    try expectEqual(TimelineGrid.resizeStart(start: s, end: e, to: 10 * 3600 + 58 * 60), e - 300)
+    try expectEqual(TimelineGrid.resizeStart(start: s, end: e, to: 11 * 3600 + 600), e - 300)
+    try expectEqual(TimelineGrid.resizeStart(start: s, end: e, to: 9 * 3600 + 32 * 60 + 40), 9 * 3600 + 35 * 60)
+    try expectEqual(TimelineGrid.resizeEnd(start: s, end: e, to: 10 * 3600 + 1), s + 300)
+    try expectEqual(TimelineGrid.resizeEnd(start: s, end: e, to: 9 * 3600), s + 300)
+    try expectEqual(TimelineGrid.resizeEnd(start: s, end: e, to: 99_999), TimelineGrid.dayLength)
+}
+
+check("TimelineGrid.newRange sorts ends, snaps, enforces minimum one step") {
+    let r = TimelineGrid.newRange(from: 14 * 3600 + 17 * 60, to: 13 * 3600 + 2 * 60)
+    try expectEqual(r.start, 13 * 3600)
+    try expectEqual(r.end, 14 * 3600 + 15 * 60)
+    let tiny = TimelineGrid.newRange(from: 9 * 3600 + 61, to: 9 * 3600 + 62)
+    try expectEqual(tiny.start, 9 * 3600)
+    try expectEqual(tiny.end, 9 * 3600 + 300)
+    let edge = TimelineGrid.newRange(from: TimelineGrid.dayLength, to: TimelineGrid.dayLength)
+    try expectEqual(edge.start, TimelineGrid.dayLength - 300)
+    try expectEqual(edge.end, TimelineGrid.dayLength)
+}
+
+check("TimelineGrid offset/date roundtrip anchors to the given day") {
+    let day = Day(year: 2026, month: 3, day: 15)
+    let d = TimelineGrid.date(atOffset: 9 * 3600 + 5 * 60, inDay: day)
+    try expectEqual(Day(date: d), day)
+    try expectEqual(TimelineGrid.offset(of: d, inDay: day), 9 * 3600 + 5 * 60)
+    try expectEqual(TimelineGrid.label(9 * 3600 + 5 * 60), "09:05")
+    try expectEqual(TimelineGrid.label(TimelineGrid.dayLength), "24:00")
+}
+
 // MARK: - Persistence
 print("Persistence")
 check("settings roundtrip with id-based defs") {
@@ -457,10 +512,24 @@ check("settings roundtrip with id-based defs") {
     var updated = seeded
     updated.categories[0].name = updated.categories[0].name + "-改"
     let renamedId = updated.categories[0].id
+    updated.categories[1].colorHex = "#123456"
     try repo.save(updated)
     let reloaded = try repo.load()
     try expectEqual(reloaded.categories[0].id, renamedId)
     try expect(reloaded.categories[0].name.hasSuffix("-改"))
+    try expectEqual(reloaded.categories[0].colorHex, nil)
+    try expectEqual(reloaded.categories[1].colorHex, "#123456")
+}
+
+check("CategoryPalette: explicit color wins, else slot color, else gray") {
+    let explicit = CategoryDef(name: "A", colorHex: "#123456")
+    try expectEqual(CategoryPalette.resolvedHex(for: explicit, slot: 0, dark: false), "#123456")
+    try expectEqual(CategoryPalette.resolvedHex(for: explicit, slot: 0, dark: true), "#123456")
+    let auto = CategoryDef(name: "B")
+    try expectEqual(CategoryPalette.resolvedHex(for: auto, slot: 0, dark: false), CategoryPalette.lightHex[0])
+    try expectEqual(CategoryPalette.resolvedHex(for: auto, slot: 0, dark: true), CategoryPalette.darkHex[0])
+    try expectEqual(CategoryPalette.resolvedHex(for: auto, slot: 8, dark: false), CategoryPalette.fallbackHex)
+    try expectEqual(CategoryPalette.resolvedHex(for: nil, slot: nil, dark: false), CategoryPalette.fallbackHex)
 }
 
 check("completed days roundtrip") {

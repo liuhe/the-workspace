@@ -26,7 +26,7 @@ tasker 的数据全部落在本地磁盘上。默认根目录 `~/Documents/taske
 {
   "categories": [
     { "id": "DD0E9FC0-9037-43F6-B75E-6C4BA97F078E", "name": "Daily follow-up" },
-    { "id": "3114879A-BA37-4149-88B2-AC018909E035", "name": "Meeting" }
+    { "id": "3114879A-BA37-4149-88B2-AC018909E035", "name": "Meeting", "colorHex": "#eb6834" }
   ],
   "workTypes": [
     { "id": "42492DAB-A3CE-4483-976D-21C2901202A5", "name": "Unspecified" },
@@ -35,7 +35,7 @@ tasker 的数据全部落在本地磁盘上。默认根目录 `~/Documents/taske
 }
 ```
 
-- **categories**：任务的"工作分类"（每个任务通过 `categoryId` 引用一个）。
+- **categories**：任务的"工作分类"（每个任务通过 `categoryId` 引用一个）。可选 `colorHex`（`#rrggbb`）是甘特图里该分类的颜色；缺失 = 自动，按分类在数组里的顺序取 8 槽位调色板色，超出 8 个归灰。
 - **workTypes**：时间记录的"工作类型"（每条 entry 通过 `workTypeId` 引用一个）。
 - 如果任务/记录引用了不在这里的 id（已删除），app 里会显示为 `(Unknown)`。
 

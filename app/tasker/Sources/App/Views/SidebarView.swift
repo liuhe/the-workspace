@@ -15,6 +15,11 @@ struct SidebarView: View {
             HStack(spacing: 8) {
                 FilterMenu(showingDayPicker: $showingDayPickerForFilter,
                            pushingFromDay: $pushingFromDay)
+                Button {
+                    showingNewTaskSheet = true
+                } label: { Image(systemName: "plus") }
+                .keyboardShortcut("n", modifiers: [.command])
+                .help("New task")
                 Spacer()
                 if store.scope == .allDays {
                     CollapseAllButton()
@@ -26,16 +31,15 @@ struct SidebarView: View {
             GroupedTaskList()
             Divider()
             HStack {
-                Button {
-                    showingNewTaskSheet = true
-                } label: {
-                    Label("New task", systemImage: "plus")
-                }
-                .keyboardShortcut("n", modifiers: [.command])
                 Spacer()
                 Button {
                     openWindow(id: "stats")
                 } label: { Image(systemName: "chart.bar") }
+                .help("Statistics")
+                Button {
+                    openWindow(id: "gantt")
+                } label: { Image(systemName: "calendar.day.timeline.left") }
+                .help("Gantt")
                 Button {
                     showingSettings = true
                 } label: { Image(systemName: "gearshape") }
@@ -251,9 +255,13 @@ private struct StatusFilterMenu: View {
 
 // MARK: - 新任务弹框
 
-private struct NewTaskSheet: View {
+/// 新建任务弹框。`targetDay` 非 nil 时任务加入指定那天（甘特图用）；nil 时跟随侧栏当前范围。
+struct NewTaskSheet: View {
     @EnvironmentObject var store: WorkspaceStore
     @Binding var isPresented: Bool
+    var targetDay: Day? = nil
+    /// 创建成功后的回调（甘特图用它选中新任务）
+    var onCreated: ((UUID) -> Void)? = nil
     @State private var title: String = ""
     @FocusState private var focused: Bool
 
@@ -280,7 +288,13 @@ private struct NewTaskSheet: View {
     private func create() {
         let trimmed = title.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return }
-        store.createTask(title: trimmed)
+        if let targetDay {
+            if let id = store.createTask(title: trimmed, inDay: targetDay) {
+                onCreated?(id)
+            }
+        } else {
+            store.createTask(title: trimmed)
+        }
         isPresented = false
     }
 }

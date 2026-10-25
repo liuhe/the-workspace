@@ -309,3 +309,63 @@
 - `DayGroupHeader` 加 `onToggle`，整行 `contentShape(Rectangle())` + `onTapGesture`，调用 `store.setGroupCollapsed` 取反；右侧原生 chevron 保留
 - build 通过；已重启本机 app
 
+## 2026-10-25 甘特图窗口
+
+- 需求：统计按钮旁加按钮，弹独立窗口，选某一天 → 按分类分组的任务 + 带时间刻度的甘特图，可在图上直接点击 / 拖动改时间段，最小刻度 5 分钟
+- 模型：overview.md UI 布局补"甘特图窗口"小节及直接编辑规则
+- 领域层新增 `TimelineGrid`（`Sources/Domain/TimelineGrid.swift`）：以"距当天 0:00 的秒数"表达，`snap` / `move` / `resizeStart` / `resizeEnd` / `newRange` + Date 互转；与时区、UI 解耦
+- `WorkspaceStore` 新增 `setEntryRange(taskId:entryId:inDay:start:end:)`、`addTimedEntry(taskId:inDay:start:end:)`（优先填该天未开始的占位记录，否则新建一条）
+- `GanttView.swift`：`Window("Gantt", id: "gantt")`；分类色用 dataviz 默认 8 槽位分类色（按设置里分类顺序固定分配，不循环，超出归灰，深浅色各一套）；条身 / 左右 7pt 手柄各挂 `DragGesture(minimumDistance: 0)`，拖动中显示起止时间气泡，松手才写盘；空白处拖出新记录；底部 inspector 的 DatePicker 也吸附到 5 分钟
+- 侧栏底部统计按钮右侧加 `calendar.day.timeline.left` 按钮
+- 验证：build 通过；check 新增 5 个 TimelineGrid 用例，41/41 通过；已重启本机 app。甘特图拖动交互本机无法替用户点，待用户验证；未提交
+
+## 2026-10-25 甘特图：底部选中条可改标题
+
+- 用户已打开甘特图窗口验证渲染正常；问及同一行两个条 = 该任务当天两条时间记录，小条疑为空白处拖动误建
+- 用户要求底部选中条支持直接编辑标题（时间 DatePicker 原本就可编辑）：标题改为 TextField，沿用详情页逐键 `store.updateEntry` 写盘的模式
+- build 通过；已重启本机 app；未提交
+
+## 2026-10-25 甘特图：窄条标题外置
+
+- 用户反馈：条太短时标题不显示；要求始终显示，超出条也没关系
+- 条宽 ≤ 56pt 时标题改为用 primary 色画在条右侧（`fixedSize` + offset，不参与命中测试），否则仍白字写在条内
+- build 通过；已重启本机 app；未提交
+
+## 2026-10-25 甘特图：窄条标题改为从条左边缘起写
+
+- 用户反馈：外置标题希望从短条最左边开始，而不是从条右侧外面开始
+- 外置标题 offset 由 `bw + 4` 改为 `4`，仍 primary 色、不参与命中测试
+- build 通过；已重启本机 app；未提交
+
+## 2026-10-25 甘特图：选中任务模式
+
+- 用户要求：点任务本身进入选中任务模式，底部变成任务编辑条（标题、分类、该天优先级）
+- `GanttSelection` 由 struct 改为 enum `{ task(UUID), entry(taskId:entryId:) }`；任务行左侧标签整块可点，选中时行底高亮 + 标题加粗
+- `GanttInspector` 拆为 `taskEditor`（标题 TextField、分类 Picker、优先级 Picker，复用详情页同样的 store 命令）和 `entryEditor`（原有记录编辑）
+- build 通过；已重启本机 app；未提交
+
+## 2026-10-25 甘特图优先级前缀 + 新建任务按钮上移
+
+- 甘特图任务标题前加该天优先级 emoji 前缀（`priority(in: .day(day)).titlePrefix`），与侧栏一致
+- 侧栏 "New task" 从底栏移到顶栏范围下拉右侧，改为 `plus` 图标按钮，Cmd+N 保留
+- 甘特图日期右侧加 `plus` 按钮；`WorkspaceStore.createTask(title:inDay:isCurrent:)` 新增显式归属日版本，原 `createTask(title:)` 改为按侧栏范围委托；`NewTaskSheet` 改为非 private 并接受 `targetDay`
+- build 通过；已重启本机 app；未提交
+
+## 2026-10-25 甘特图：新建后自动选中
+
+- `createTask(title:inDay:isCurrent:)` 改为返回新任务 id；`NewTaskSheet` 加 `onCreated` 回调；甘特图在回调里 `selection = .task(id)`
+- build 通过；已重启本机 app；未提交
+
+## 2026-10-25 分类颜色可在设置里指定
+
+- 用户问甘特图色条颜色如何决定，并要求在设置页可配置
+- 模型：`CategoryDef` 新增可选 `colorHex`；领域层 `CategoryPalette` 持有 8 槽位浅 / 深色表与解析规则（显式 > 槽位自动 > 灰）；`settings.json` 文档同步
+- App 层 `CategoryColor`（hex ↔ Color、按外观解析）替代 GanttView 内的私有 GanttPalette
+- 设置页 Categories 列表每行前加色块按钮，popover 内有 8 槽位色、Custom 取色器、Auto 复位；自定义色在浅 / 深色外观下用同一个值
+- Check：settings roundtrip 加 colorHex 断言，新增 CategoryPalette 解析用例；42/42 通过
+- build 通过；已重启本机 app；未提交
+
+## 2026-10-25 提交
+
+- 今天甘特图相关全部改动（窗口、TimelineGrid、选中 / 编辑、新建按钮上移、分类颜色设置）合为一个 commit 提交到 main；本机未提交的两处 `.claude/skills/aie-*` 删除不属于本次工作，未纳入
+

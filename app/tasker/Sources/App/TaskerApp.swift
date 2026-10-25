@@ -40,6 +40,13 @@ struct TaskerApp: App {
             }
         }
 
+        // 独立的甘特图窗口：选某一天，按分类分组展示任务 + 可拖动编辑的时间轴
+        Window("Gantt", id: "gantt") {
+            GanttView()
+                .environmentObject(store)
+                .frame(minWidth: 900, idealWidth: 1200, minHeight: 500, idealHeight: 700)
+        }
+
         // 独立的可拖拽调整大小的统计窗口
         Window("Statistics", id: "stats") {
             StatsView()
