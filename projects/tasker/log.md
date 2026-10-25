@@ -407,4 +407,5 @@
 - `git push origin main`（de113ff..0a0e2e6），tag `v0.5.0` 已推送触发 GitHub Actions Release：https://github.com/liuhe/the-workspace/actions/runs/40200847267
 - 版本号从 v0.4.22 跳到 v0.5.0：甘特图整套功能属于新增特性，升次版本号
 - 本机 `gh` 未登录，运行状态用公开 API 查看
+- Release 工作流成功，产物 `tasker-0.5.0.zip` 已挂在 https://github.com/liuhe/the-workspace/releases/tag/v0.5.0
 
