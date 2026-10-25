@@ -402,3 +402,9 @@
 
 - 实际占用、统计分类层级、连续"现在"线、Row per entry、Detail pane 合为一个 commit 提交到 main；`.claude/skills/aie-*` 删除仍未纳入
 
+## 2026-10-25 发布 v0.5.0
+
+- `git push origin main`（de113ff..0a0e2e6），tag `v0.5.0` 已推送触发 GitHub Actions Release：https://github.com/liuhe/the-workspace/actions/runs/40200847267
+- 版本号从 v0.4.22 跳到 v0.5.0：甘特图整套功能属于新增特性，升次版本号
+- 本机 `gh` 未登录，运行状态用公开 API 查看
+
