@@ -25,7 +25,7 @@ struct ContentView: View {
         } message: {
             Text(store.lastError ?? "")
         }
-        .onChange(of: store.dayFilter) { _, _ in store.pruneSelectionIfOffscreen() }
+        .onChange(of: store.scope) { _, _ in store.pruneSelectionIfOffscreen() }
         .onChange(of: store.showCurrent) { _, _ in store.pruneSelectionIfOffscreen() }
         .onChange(of: store.hideCompleted) { _, _ in store.pruneSelectionIfOffscreen() }
         .onChange(of: store.hideNotStarted) { _, _ in store.pruneSelectionIfOffscreen() }
@@ -33,9 +33,10 @@ struct ContentView: View {
 
     private var navTitle: String {
         let base: String
-        switch store.dayFilter {
+        switch store.scope {
         case .day(let d): base = d.descriptionWithWeekday + (store.isDayCompleted(d) ? " ✓" : "")
         case .backlog: base = "Backlog"
+        case .allDays: base = "All days"
         }
         var tags: [String] = []
         if store.showCurrent { tags.append("Current") }

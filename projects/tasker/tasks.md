@@ -33,6 +33,7 @@
 
 - ✅ 描述编辑器：接入 `markdown-lib` 的 `MarkdownEditor` package，tasker 侧保留 `Binding<String>` + debounce 保存模式，并补 host 侧 link / drop / image paste 处理
 - ✅ 日期完成标记：日期集合可标记为完成，日期菜单/日历/标题展示 `✓`，后续新任务加入该日期时自动清标
+- ✅ 侧栏“所有日期”模式：天 → 分类 → 任务，Backlog 作为最后一组；每行按所属天上下文显示状态/优先级/当前标
 
 ## 待办 / 未做
 

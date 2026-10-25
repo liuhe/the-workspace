@@ -1,8 +1,38 @@
 import Foundation
 
+/// 任务行的上下文：状态 / 优先级 / 当前标都相对于某天或 Backlog 计算。
 public enum TaskFilter: Hashable, Sendable {
     case day(Day)
     case backlog
+}
+
+/// 侧栏列表范围：某天 / Backlog 对应单个 TaskFilter；所有日期把每一天 + Backlog 排开。
+public enum ListScope: Hashable, Sendable {
+    case day(Day)
+    case backlog
+    case allDays
+
+    /// 单上下文范围对应的 TaskFilter；`.allDays` 没有单一上下文，返回 nil
+    public var filter: TaskFilter? {
+        switch self {
+        case .day(let d): return .day(d)
+        case .backlog: return .backlog
+        case .allDays: return nil
+        }
+    }
+}
+
+/// 所有日期视图里的一个分组：某天或 Backlog，内部已按分类分组。
+public struct DayGroup: Sendable {
+    public let context: TaskFilter
+    public let categories: [(CategoryDef, [TaskAggregate])]
+
+    public init(context: TaskFilter, categories: [(CategoryDef, [TaskAggregate])]) {
+        self.context = context
+        self.categories = categories
+    }
+
+    public var tasks: [TaskAggregate] { categories.flatMap { $0.1 } }
 }
 
 public enum TaskQueries {
@@ -59,6 +89,30 @@ public enum TaskQueries {
             let pb = b.priority(in: filter)
             if pa != pb { return pa < pb }
             return a.meta.updatedAt > b.meta.updatedAt
+        }
+    }
+
+    /// 所有日期视图：出现过的每一天按升序各成一组，Backlog 作为最后一组；
+    /// 每组内按该组上下文过滤、排序再按分类分组；过滤后为空的组不返回。
+    public static func groupAllDays(_ tasks: [TaskAggregate],
+                                    categories: [CategoryDef],
+                                    currentOnly: Bool = false,
+                                    hideCompleted: Bool = false,
+                                    hideNotStarted: Bool = false) -> [DayGroup]
+    {
+        var days: Set<Day> = []
+        for t in tasks { days.formUnion(t.meta.membership.days) }
+        var contexts: [TaskFilter] = days.sorted().map { .day($0) }
+        contexts.append(.backlog)
+        return contexts.compactMap { context in
+            let filtered = apply(context,
+                                 currentOnly: currentOnly,
+                                 hideCompleted: hideCompleted,
+                                 hideNotStarted: hideNotStarted,
+                                 to: tasks)
+            guard !filtered.isEmpty else { return nil }
+            return DayGroup(context: context,
+                            categories: groupByCategory(filtered, categories: categories))
         }
     }
 

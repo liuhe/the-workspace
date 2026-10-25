@@ -6,7 +6,11 @@ import TaskerPersistence
 @MainActor
 final class WorkspaceStore: ObservableObject {
     @Published private(set) var tasks: [TaskAggregate] = []
-    @Published var dayFilter: TaskFilter = .day(Day.today())
+    @Published var scope: ListScope = .day(Day.today())
+    /// 所有日期模式下选中行所属的上下文（某天 / Backlog）；单上下文模式下忽略
+    @Published var selectedContext: TaskFilter?
+    /// 所有日期模式下被折叠的分组；仅内存态，不落盘
+    @Published var collapsedGroups: Set<TaskFilter> = []
     @Published var showCurrent: Bool = false
     @Published var hideCompleted: Bool = false
     @Published var hideNotStarted: Bool = false
@@ -56,6 +60,7 @@ final class WorkspaceStore: ObservableObject {
             dataRoot = url
             UserDefaults.standard.set(url.path, forKey: Self.dataRootDefaultsKey)
             selectedTaskId = nil
+            selectedContext = nil
             currentDescription = ""
             completedDays = []
             reload()
@@ -65,16 +70,59 @@ final class WorkspaceStore: ObservableObject {
         }
     }
 
+    /// 详情页 / 命令使用的上下文：单上下文模式下即范围本身；
+    /// 所有日期模式下是选中行所属的上下文，没有选中时按 Backlog 处理。
+    var contextFilter: TaskFilter {
+        scope.filter ?? selectedContext ?? .backlog
+    }
+
+    /// 单上下文模式（某天 / Backlog）下过滤排序后的任务；所有日期模式返回空
     var filteredTasks: [TaskAggregate] {
-        TaskQueries.apply(dayFilter,
-                          currentOnly: showCurrent,
-                          hideCompleted: hideCompleted,
-                          hideNotStarted: hideNotStarted,
-                          to: tasks)
+        guard let filter = scope.filter else { return [] }
+        return TaskQueries.apply(filter,
+                                 currentOnly: showCurrent,
+                                 hideCompleted: hideCompleted,
+                                 hideNotStarted: hideNotStarted,
+                                 to: tasks)
     }
 
     var groupedFilteredTasks: [(CategoryDef, [TaskAggregate])] {
         TaskQueries.groupByCategory(filteredTasks, categories: settings.categories)
+    }
+
+    /// 所有日期模式：天 → 分类 → 任务，Backlog 为最后一组
+    var allDayGroups: [DayGroup] {
+        TaskQueries.groupAllDays(tasks,
+                                 categories: settings.categories,
+                                 currentOnly: showCurrent,
+                                 hideCompleted: hideCompleted,
+                                 hideNotStarted: hideNotStarted)
+    }
+
+    /// 所有日期模式：是否所有分组都已折叠（空列表视为未全折叠）
+    var allGroupsCollapsed: Bool {
+        let contexts = allDayGroups.map(\.context)
+        return !contexts.isEmpty && contexts.allSatisfy { collapsedGroups.contains($0) }
+    }
+
+    /// 一键折叠 / 展开：有任何展开的 → 全部折叠；已经全折叠 → 全部展开
+    func toggleCollapseAllGroups() {
+        if allGroupsCollapsed {
+            collapsedGroups = []
+        } else {
+            collapsedGroups = Set(allDayGroups.map(\.context))
+        }
+    }
+
+    func setGroupCollapsed(_ context: TaskFilter, _ collapsed: Bool) {
+        if collapsed { collapsedGroups.insert(context) } else { collapsedGroups.remove(context) }
+    }
+
+    /// 选中某行：记录任务和它所属的上下文，并加载描述
+    func selectTask(id: UUID?, context: TaskFilter?) {
+        selectedTaskId = id
+        selectedContext = context
+        if let id { loadDescription(for: id) }
     }
 
     func categoryName(_ id: UUID?) -> String {
@@ -109,12 +157,23 @@ final class WorkspaceStore: ObservableObject {
         saveCompletedDays()
     }
 
-    /// 当前过滤下选中的任务已不在列表里时，清空选中和描述。
-    /// 由 filter 切换（dayFilter / showCurrent）触发；任务自身变动不触发。
+    /// 当前范围下选中的任务已不在列表里时，清空选中和描述。
+    /// 由范围切换（scope / 状态开关）触发；任务自身变动不触发。
+    /// 所有日期模式下要求 (任务, 上下文) 这一行仍然存在。
     func pruneSelectionIfOffscreen() {
         guard let id = selectedTaskId else { return }
-        if !filteredTasks.contains(where: { $0.id == id }) {
+        let visible: Bool
+        switch scope {
+        case .day, .backlog:
+            visible = filteredTasks.contains(where: { $0.id == id })
+        case .allDays:
+            visible = allDayGroups.contains { group in
+                group.context == selectedContext && group.tasks.contains(where: { $0.id == id })
+            }
+        }
+        if !visible {
             selectedTaskId = nil
+            selectedContext = nil
             currentDescription = ""
         }
     }
@@ -127,6 +186,7 @@ final class WorkspaceStore: ObservableObject {
             completedDays = try repo.loadCompletedDays()
             if let id = selectedTaskId, !tasks.contains(where: { $0.id == id }) {
                 selectedTaskId = nil
+                selectedContext = nil
                 currentDescription = ""
             }
         } catch {
@@ -141,7 +201,7 @@ final class WorkspaceStore: ObservableObject {
         guard !trimmed.isEmpty else { return }
         var meta = TaskMeta(title: trimmed, categoryId: nil)
         var addedDay: Day?
-        if case .day(let d) = dayFilter {
+        if case .day(let d) = scope {
             meta.membership.dayAssignments.append(
                 DayAssignment(day: d, priority: .normal, isCurrent: showCurrent)
             )
@@ -153,6 +213,7 @@ final class WorkspaceStore: ObservableObject {
             if let addedDay { clearCompletedDay(addedDay) }
             tasks.append(agg)
             selectedTaskId = agg.id
+            selectedContext = addedDay.map { .day($0) } ?? .backlog
             currentDescription = ""
         } catch {
             lastError = "Create failed: \(error.localizedDescription)"
@@ -163,7 +224,7 @@ final class WorkspaceStore: ObservableObject {
         do {
             try repo.delete(id: id)
             tasks.removeAll { $0.id == id }
-            if selectedTaskId == id { selectedTaskId = nil; currentDescription = "" }
+            if selectedTaskId == id { selectedTaskId = nil; selectedContext = nil; currentDescription = "" }
         } catch {
             lastError = "Delete failed: \(error.localizedDescription)"
         }
@@ -183,9 +244,9 @@ final class WorkspaceStore: ObservableObject {
         updateMeta(id: id) { $0.membership.setPriority(inDay: day, priority: priority) }
     }
 
-    /// 在当前 filter 上下文改优先级；只在 .day(d) 有意义；.backlog 视图无优先级概念，忽略
-    func setPriorityInFilterContext(id: UUID, priority: Priority) {
-        if case .day(let d) = dayFilter {
+    /// 在给定上下文改优先级；只在 .day(d) 有意义；Backlog 上下文无优先级概念，忽略
+    func setPriority(id: UUID, in context: TaskFilter, priority: Priority) {
+        if case .day(let d) = context {
             setPriority(id: id, inDay: d, priority: priority)
         }
     }
@@ -193,7 +254,7 @@ final class WorkspaceStore: ObservableObject {
     func addToDay(id: UUID, day: Day) {
         guard let task = tasks.first(where: { $0.id == id }) else { return }
         let wasAssigned = task.meta.membership.days.contains(day)
-        let sourcePriority = task.priority(in: dayFilter)
+        let sourcePriority = task.priority(in: contextFilter)
         let saved = updateMeta(id: id) { $0.membership.upsertDay(day, priority: sourcePriority) }
         if saved && !wasAssigned { clearCompletedDay(day) }
     }
@@ -259,9 +320,9 @@ final class WorkspaceStore: ObservableObject {
         var agg = tasks[idx]
         let day = entryDay(for: agg)
         let wasAssigned = agg.meta.membership.days.contains(day)
-        let sourcePriority = agg.priority(in: dayFilter)
+        let sourcePriority = agg.priority(in: contextFilter)
         let shouldMarkCurrent: Bool
-        switch dayFilter {
+        switch contextFilter {
         case .day: shouldMarkCurrent = showCurrent
         case .backlog: shouldMarkCurrent = false
         }
@@ -382,8 +443,9 @@ final class WorkspaceStore: ObservableObject {
         }
     }
 
+    /// 详情页展示 / 新建时间记录用的那天：上下文是某天 → 那天；Backlog → 最后一个关联日（空则今天）
     func entryDay(for agg: TaskAggregate) -> Day {
-        switch dayFilter {
+        switch contextFilter {
         case .day(let d): return d
         case .backlog:
             return agg.meta.membership.dayAssignments.map(\.day).max() ?? Day.today()

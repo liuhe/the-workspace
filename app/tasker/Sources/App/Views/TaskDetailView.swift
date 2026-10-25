@@ -40,16 +40,16 @@ private struct MembershipBar: View {
         aggregate.meta.membership.dayAssignments.sorted { $0.day < $1.day }
     }
 
-    /// 右侧控件永远针对当前 filter 的日期；filter 是 Backlog 或任务不在那天 → 隐藏
+    /// 右侧控件永远针对当前上下文的日期；上下文是 Backlog 或任务不在那天 → 隐藏
     private var filterDay: Day? {
-        if case .day(let d) = store.dayFilter,
+        if case .day(let d) = store.contextFilter,
            aggregate.meta.membership.days.contains(d) {
             return d
         }
         return nil
     }
 
-    /// 下拉 label 显示的"当前那天"：Day filter → 那天；Backlog → 最后一个 assignment（空则 today）
+    /// 下拉 label 显示的"当前那天"：上下文是某天 → 那天；Backlog → 最后一个 assignment（空则 today）
     private var effectiveDay: Day {
         store.entryDay(for: aggregate)
     }
@@ -63,7 +63,8 @@ private struct MembershipBar: View {
             } else {
                 ForEach(sortedAssignments, id: \.day) { a in
                     Button {
-                        store.dayFilter = .day(a.day)
+                        store.scope = .day(a.day)
+                        store.selectedContext = .day(a.day)
                     } label: {
                         HStack {
                             Text(dayListItem(a))
@@ -194,7 +195,7 @@ private struct TaskInfoSection: View {
         .border(Color.secondary.opacity(0.2))
     }
 
-    private var contextualStatus: TaskStatus { aggregate.status(in: store.dayFilter) }
+    private var contextualStatus: TaskStatus { aggregate.status(in: store.contextFilter) }
 
     private var statusBadge: some View {
         HStack(spacing: 4) {

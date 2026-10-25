@@ -281,3 +281,31 @@
 ## 2026-09-10 发布
 
 - 发布 `v0.4.22`：提交 `da62d1a` 已推送到 `origin/main`，tag `v0.4.22` 已推送触发 GitHub Actions Release
+
+## 2026-10-25 本机启动
+
+- `swift build --package-path app/tasker --product tasker` 后直接跑 debug 产物 `app/tasker/.build/x86_64-apple-macosx/debug/tasker`（nohup 后台，日志 `/tmp/tasker.log`）
+
+## 2026-10-25 侧栏“所有日期”模式
+
+- 模型：任务集合新增“所有日期（虚拟视图）”——天升序 → 分类 → 任务，Backlog 为最后一组；每行状态 / 优先级 / 当前标按该行所属天的上下文计算；状态开关逐天应用，过滤后为空的天不显示
+- 领域层 `TaskQueries`：新增 `ListScope { day, backlog, allDays }`（侧栏范围）与 `TaskFilter { day, backlog }`（行上下文）分离；`DayGroup` + `groupAllDays` 产出 天 → 分类 → 任务
+- `WorkspaceStore`：`dayFilter: TaskFilter` 改名 `scope: ListScope`；新增 `selectedContext`（所有日期模式下选中行所属上下文）和 `contextFilter`（详情页 / 命令统一使用）；`setPriorityInFilterContext` 改为 `setPriority(id:in:priority:)` 显式传上下文；`pruneSelectionIfOffscreen` 在所有日期模式下按 (任务, 上下文) 判断
+- `SidebarView`：过滤菜单加 `All days`；列表选中类型改为 `RowRef { taskId, context }`，同一任务在多天下各自独立选中；`TaskRow` / `TaskContextMenu` 不再读 store 范围，改为接收所在行上下文；所有日期模式下分类名作为不可选的小标题行，天标题带 ★ / ✓
+- `TaskDetailView` / `ContentView`：改用 `contextFilter` / `scope`；窗口标题 `All days`
+- Check 新增 4 个用例（天排序 + Backlog 殿后、完成任务留天不进 Backlog + 空组丢弃、currentOnly 逐天、`ListScope.filter`）；总 36/36 通过
+- 已用新构建重启本机 app；未提交
+
+## 2026-10-25 所有日期模式：日期标题醒目 + 可折叠
+
+- 用户反馈：日期标题不够明显；希望按日期折叠，并能一键全折叠
+- 天分组改用 `Section(isExpanded:content:header:)`，自定义标题 `DayGroupHeader`（headline 粗体 + 任务数胶囊，今天用 accent 色）；分类小标题和任务行左缩进 8pt
+- `WorkspaceStore.collapsedGroups: Set<TaskFilter>`（内存态，不落盘）+ `toggleCollapseAllGroups()`：有展开的就全折叠，全折叠了就全展开；顶栏在 All days 模式下显示 `CollapseAllButton`
+- 验证：build 通过，check 36/36；已重启本机 app
+
+## 2026-10-25 天分组标题整行可点击折叠
+
+- 用户反馈：只能点最右边的小 chevron 折叠，希望点整行
+- `DayGroupHeader` 加 `onToggle`，整行 `contentShape(Rectangle())` + `onTapGesture`，调用 `store.setGroupCollapsed` 取反；右侧原生 chevron 保留
+- build 通过；已重启本机 app
+

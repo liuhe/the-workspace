@@ -384,6 +384,57 @@ check("group by category: nil categoryId → (Unset)") {
     let groups = TaskQueries.groupByCategory([a], categories: [])
     try expectEqual(groups.first?.0.name, "(Unset)")
 }
+check("all days: days ascending, category inside day, Backlog last") {
+    let d1 = Day(year: 2026, month: 10, day: 24)
+    let d2 = Day(year: 2026, month: 10, day: 25)
+    let cat1 = CategoryDef(name: "Meetings")
+    let cat2 = CategoryDef(name: "Daily")
+    // A 只在 d2；B 在 d1 和 d2；C 不属于任何一天（只出现在 Backlog）
+    let a = mkAgg("A", days: [d2], categoryId: cat1.id)
+    let b = mkAgg("B", days: [d1, d2], categoryId: cat2.id)
+    let c = mkAgg("C", days: [], categoryId: cat1.id)
+    let groups = TaskQueries.groupAllDays([a, b, c], categories: [cat1, cat2])
+    try expectEqual(groups.map(\.context), [.day(d1), .day(d2), .backlog])
+    // d1 只有 B（Daily）
+    try expectEqual(groups[0].categories.map(\.0.name), ["Daily"])
+    try expectEqual(groups[0].tasks.map(\.meta.title), ["B"])
+    // d2 按分类顺序：Meetings(A) → Daily(B)
+    try expectEqual(groups[1].categories.map(\.0.name), ["Meetings", "Daily"])
+    try expectEqual(groups[1].tasks.map(\.meta.title), ["A", "B"])
+    // Backlog = 所有未完成任务，含不属于任何一天的 C
+    try expectEqual(Set(groups[2].tasks.map(\.meta.title)), ["A", "B", "C"])
+}
+check("all days: completed task stays under its day but leaves Backlog; empty groups dropped") {
+    let d = Day(year: 2026, month: 10, day: 25)
+    let doneEntry = TimeEntry(startAt: d.date().addingTimeInterval(3600),
+                              endAt: d.date().addingTimeInterval(7200),
+                              marker: .done)
+    let done = TaskAggregate(
+        meta: TaskMeta(title: "D", membership: Membership(dayAssignments: [DayAssignment(day: d)])),
+        entries: [doneEntry]
+    )
+    let groups = TaskQueries.groupAllDays([done], categories: [])
+    try expectEqual(groups.map(\.context), [.day(d)])  // Backlog 为空，被丢掉
+    try expectEqual(groups[0].tasks.map(\.meta.title), ["D"])
+    // hideCompleted 逐天应用 → 整个列表为空
+    let hidden = TaskQueries.groupAllDays([done], categories: [], hideCompleted: true)
+    try expect(hidden.isEmpty)
+}
+check("all days: currentOnly applies per day context") {
+    let d1 = Day(year: 2026, month: 10, day: 24)
+    let d2 = Day(year: 2026, month: 10, day: 25)
+    var t = mkAgg("T", days: [d1, d2])
+    t.meta.membership.setIsCurrent(inDay: d2, isCurrent: true)
+    let groups = TaskQueries.groupAllDays([t], categories: [], currentOnly: true)
+    // d1 没有 current → 不出现；d2 有；Backlog 下 hasAnyCurrent 成立
+    try expectEqual(groups.map(\.context), [.day(d2), .backlog])
+}
+check("ListScope.filter: single-context scopes map to TaskFilter, allDays has none") {
+    let d = Day.today()
+    try expectEqual(ListScope.day(d).filter, .day(d))
+    try expectEqual(ListScope.backlog.filter, .backlog)
+    try expect(ListScope.allDays.filter == nil)
+}
 check("SettingsLookup resolves workType by id") {
     let wt = WorkTypeDef(name: "coding")
     try expectEqual(SettingsLookup.workTypeName(wt.id, in: [wt]), "coding")

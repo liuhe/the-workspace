@@ -16,6 +16,9 @@ struct SidebarView: View {
                 FilterMenu(showingDayPicker: $showingDayPickerForFilter,
                            pushingFromDay: $pushingFromDay)
                 Spacer()
+                if store.scope == .allDays {
+                    CollapseAllButton()
+                }
                 StatusFilterMenu()
             }
             .padding(8)
@@ -49,7 +52,7 @@ struct SidebarView: View {
             DayPickerSheet(isPresented: $showingDayPickerForFilter,
                            daysWithTasks: store.daysWithTasks,
                            completedDays: store.completedDays) { day in
-                store.dayFilter = .day(day)
+                store.scope = .day(day)
             }
         }
         .sheet(isPresented: $showingSettings) {
@@ -137,7 +140,8 @@ private struct FilterMenu: View {
             Button("Choose date…") { showingDayPicker = true }
             Divider()
             backlogItem
-            if case .day(let d) = store.dayFilter {
+            allDaysItem
+            if case .day(let d) = store.scope {
                 Divider()
                 Toggle("Day completed", isOn: Binding(
                     get: { store.isDayCompleted(d) },
@@ -156,8 +160,9 @@ private struct FilterMenu: View {
     }
 
     private var label: String {
-        switch store.dayFilter {
+        switch store.scope {
         case .backlog: return "Backlog"
+        case .allDays: return "All days"
         case .day(let d): return dayLabel(d)
         }
     }
@@ -171,8 +176,8 @@ private struct FilterMenu: View {
     @ViewBuilder
     private func dayItem(day: Day) -> some View {
         Toggle(dayLabel(day), isOn: Binding(
-            get: { store.dayFilter == .day(day) },
-            set: { if $0 { store.dayFilter = .day(day) } }
+            get: { store.scope == .day(day) },
+            set: { if $0 { store.scope = .day(day) } }
         ))
     }
 
@@ -186,9 +191,35 @@ private struct FilterMenu: View {
     @ViewBuilder
     private var backlogItem: some View {
         Toggle("Backlog", isOn: Binding(
-            get: { store.dayFilter == .backlog },
-            set: { if $0 { store.dayFilter = .backlog } }
+            get: { store.scope == .backlog },
+            set: { if $0 { store.scope = .backlog } }
         ))
+    }
+
+    @ViewBuilder
+    private var allDaysItem: some View {
+        Toggle("All days", isOn: Binding(
+            get: { store.scope == .allDays },
+            set: { if $0 { store.scope = .allDays } }
+        ))
+    }
+}
+
+// MARK: - 一键折叠 / 展开所有天分组
+
+private struct CollapseAllButton: View {
+    @EnvironmentObject var store: WorkspaceStore
+
+    var body: some View {
+        Button {
+            store.toggleCollapseAllGroups()
+        } label: {
+            Image(systemName: store.allGroupsCollapsed
+                  ? "rectangle.expand.vertical"
+                  : "rectangle.compress.vertical")
+        }
+        .buttonStyle(.borderless)
+        .help(store.allGroupsCollapsed ? "Expand all days" : "Collapse all days")
     }
 }
 
@@ -294,16 +325,50 @@ struct DayPickerSheet: View {
     }
 }
 
-// MARK: - 任务列表（按分类分组）
+// MARK: - 任务列表
 
+/// 列表中一行的身份：任务 + 它所属的上下文。所有日期模式下同一任务可在多天出现，各自独立选中。
+private struct RowRef: Hashable {
+    let taskId: UUID
+    let context: TaskFilter
+}
+
+/// 某天 / Backlog：按分类分组；所有日期：天 → 分类 → 任务，Backlog 为最后一组。
 private struct GroupedTaskList: View {
     @EnvironmentObject var store: WorkspaceStore
     @State private var addingDayFor: UUID?
 
     var body: some View {
         List(selection: selectionBinding) {
-            ForEach(store.groupedFilteredTasks, id: \.0.id) { pair in
-                CategorySection(cat: pair.0, tasks: pair.1, onPickDay: { addingDayFor = $0 })
+            switch store.scope {
+            case .day, .backlog:
+                let context = store.contextFilter
+                ForEach(store.groupedFilteredTasks, id: \.0.id) { pair in
+                    Section(pair.0.name) {
+                        TaskRows(context: context, tasks: pair.1, onPickDay: { addingDayFor = $0 })
+                    }
+                }
+            case .allDays:
+                ForEach(store.allDayGroups, id: \.context) { group in
+                    Section(isExpanded: expandedBinding(group.context)) {
+                        ForEach(group.categories, id: \.0.id) { pair in
+                            Text(pair.0.name)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .padding(.leading, 8)
+                                .selectionDisabled()
+                            TaskRows(context: group.context, tasks: pair.1, onPickDay: { addingDayFor = $0 })
+                                .padding(.leading, 8)
+                        }
+                    } header: {
+                        DayGroupHeader(title: groupHeader(group.context),
+                                       count: group.tasks.count,
+                                       isToday: group.context == .day(Day.today())) {
+                            let collapsed = store.collapsedGroups.contains(group.context)
+                            store.setGroupCollapsed(group.context, !collapsed)
+                        }
+                    }
+                }
             }
         }
         .listStyle(.sidebar)
@@ -321,12 +386,32 @@ private struct GroupedTaskList: View {
         }
     }
 
-    private var selectionBinding: Binding<UUID?> {
+    /// 天分组标题：今天前缀 ★；已完成日子后缀 ✓
+    private func groupHeader(_ context: TaskFilter) -> String {
+        switch context {
+        case .backlog: return "Backlog"
+        case .day(let d):
+            let isToday = d == Day.today()
+            let isCompleted = store.isDayCompleted(d)
+            return (isToday ? "★ " : "") + d.descriptionWithWeekday + (isCompleted ? " ✓" : "")
+        }
+    }
+
+    private func expandedBinding(_ context: TaskFilter) -> Binding<Bool> {
         Binding(
-            get: { store.selectedTaskId },
+            get: { !store.collapsedGroups.contains(context) },
+            set: { store.setGroupCollapsed(context, !$0) }
+        )
+    }
+
+    private var selectionBinding: Binding<RowRef?> {
+        Binding(
+            get: {
+                guard let id = store.selectedTaskId else { return nil }
+                return RowRef(taskId: id, context: store.contextFilter)
+            },
             set: { new in
-                store.selectedTaskId = new
-                if let id = new { store.loadDescription(for: id) }
+                store.selectTask(id: new?.taskId, context: new?.context)
             }
         )
     }
@@ -339,20 +424,44 @@ private struct GroupedTaskList: View {
     }
 }
 
-private struct CategorySection: View {
-    let cat: CategoryDef
+/// 所有日期模式的天分组标题：粗体 + 任务数；今天用强调色；点击整行切换折叠
+private struct DayGroupHeader: View {
+    let title: String
+    let count: Int
+    let isToday: Bool
+    let onToggle: () -> Void
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(title)
+                .font(.headline)
+                .foregroundStyle(isToday ? Color.accentColor : Color.primary)
+            Text("\(count)")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 1)
+                .background(Color.secondary.opacity(0.15), in: Capsule())
+            Spacer()
+        }
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
+        .onTapGesture(perform: onToggle)
+    }
+}
+
+private struct TaskRows: View {
+    let context: TaskFilter
     let tasks: [TaskAggregate]
     let onPickDay: (UUID) -> Void
 
     var body: some View {
-        Section(cat.name) {
-            ForEach(tasks, id: \.id) { agg in
-                TaskRow(aggregate: agg)
-                    .tag(agg.id)
-                    .contextMenu {
-                        TaskContextMenu(aggregate: agg, onPickDay: { onPickDay(agg.id) })
-                    }
-            }
+        ForEach(tasks, id: \.id) { agg in
+            TaskRow(aggregate: agg, context: context)
+                .tag(RowRef(taskId: agg.id, context: context))
+                .contextMenu {
+                    TaskContextMenu(aggregate: agg, context: context, onPickDay: { onPickDay(agg.id) })
+                }
         }
     }
 }
@@ -362,6 +471,8 @@ private struct IdWrap: Identifiable { let id: UUID }
 private struct TaskContextMenu: View {
     @EnvironmentObject var store: WorkspaceStore
     let aggregate: TaskAggregate
+    /// 这一行所属的上下文（某天 / Backlog）
+    let context: TaskFilter
     let onPickDay: () -> Void
 
     var body: some View {
@@ -371,7 +482,7 @@ private struct TaskContextMenu: View {
             }
             Button("Choose date…") { onPickDay() }
         }
-        if case .day(let currentDay) = store.dayFilter,
+        if case .day(let currentDay) = context,
            aggregate.meta.membership.days.contains(currentDay) {
             Button("Remove from \(currentDay.description)") {
                 store.removeFromDay(id: aggregate.id, day: currentDay)
@@ -380,19 +491,19 @@ private struct TaskContextMenu: View {
         Menu("Priority") {
             ForEach(Priority.allCases, id: \.self) { p in
                 Button {
-                    store.setPriorityInFilterContext(id: aggregate.id, priority: p)
+                    store.setPriority(id: aggregate.id, in: context, priority: p)
                 } label: {
                     HStack {
                         Text("\(p.titlePrefix)\(p.displayName)")
-                        if aggregate.priority(in: store.dayFilter) == p {
+                        if aggregate.priority(in: context) == p {
                             Image(systemName: "checkmark")
                         }
                     }
                 }
             }
         }
-        // "Current" 是 day-relation 上的属性；只在 filter 是某天时可切换
-        if case .day(let d) = store.dayFilter,
+        // "Current" 是 day-relation 上的属性；只在上下文是某天时可切换
+        if case .day(let d) = context,
            aggregate.meta.membership.days.contains(d) {
             let cur = aggregate.meta.membership.isCurrent(inDay: d)
             Button(cur ? "Unmark current for \(d.description)" : "Mark current for \(d.description)") {
@@ -440,12 +551,13 @@ private struct TaskContextMenu: View {
 // MARK: - 单行（emoji 前缀 + 状态点，无副行）
 
 private struct TaskRow: View {
-    @EnvironmentObject var store: WorkspaceStore
     let aggregate: TaskAggregate
+    /// 这一行所属的上下文（某天 / Backlog）
+    let context: TaskFilter
 
     var body: some View {
         HStack(spacing: 8) {
-            StatusDot(status: aggregate.status(in: store.dayFilter))
+            StatusDot(status: aggregate.status(in: context))
             Text(displayTitle)
                 .lineLimit(1)
             Spacer()
@@ -461,11 +573,11 @@ private struct TaskRow: View {
 
     private var displayTitle: String {
         let t = aggregate.meta.title.isEmpty ? "(Untitled)" : aggregate.meta.title
-        return "\(aggregate.priority(in: store.dayFilter).titlePrefix)\(t)"
+        return "\(aggregate.priority(in: context).titlePrefix)\(t)"
     }
 
     private var isCurrentInContext: Bool {
-        switch store.dayFilter {
+        switch context {
         case .day(let d): return aggregate.meta.membership.isCurrent(inDay: d)
         case .backlog: return false
         }
