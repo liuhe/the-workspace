@@ -422,3 +422,4 @@
 
 - 甘特图加号菜单 + Backlog 选择弹框提交到 main 并打 tag `v0.5.1`，推送触发 GitHub Actions Release
 - 补丁号：单个窗口的交互增强，不升次版本号
+- Release 工作流成功（https://github.com/liuhe/the-workspace/actions/runs/40258078778），产物 `tasker-0.5.1.zip` 已挂在 https://github.com/liuhe/the-workspace/releases/tag/v0.5.1
