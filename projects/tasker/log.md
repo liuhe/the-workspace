@@ -434,3 +434,4 @@
 ## 2026-10-26 发布 v0.5.2
 
 - 侧栏加号菜单提交到 main 并打 tag `v0.5.2`，推送触发 GitHub Actions Release
+- Release 工作流成功（https://github.com/liuhe/the-workspace/actions/runs/40259235712），产物 `tasker-0.5.2.zip` 已挂在 https://github.com/liuhe/the-workspace/releases/tag/v0.5.2
