@@ -467,3 +467,8 @@
 - 分析：把手命中结构未变，标签层本就 `allowsHitTesting(false)`（与原窄条溢出标签同法）；v0.5.4 新加的色条 `.contextMenu` 在 macOS 上会吞掉 mouseDown、与 `DragGesture` 冲突，是更可能的原因
 - 处理：标签 `ViewThatFits` 从 overlay 移回 ZStack 手势层之下；撤掉色条右键菜单，删除只保留底部垃圾桶；overview / tasks 同步
 - 重启 app 后用户反馈"突然可以了"，时间上正好是去掉 contextMenu 的新构建；v0.5.4 发布版仍含 contextMenu，待发 v0.5.5 修正。未提交
+
+## 2026-10-26 发布 v0.5.5
+
+- 撤掉色条右键菜单（修复拖动把手失效）提交到 main 并打 tag `v0.5.5`，推送触发 GitHub Actions Release
+- Release 工作流成功（https://github.com/liuhe/the-workspace/actions/runs/40262631941），产物 `tasker-0.5.5.zip` 已挂在 https://github.com/liuhe/the-workspace/releases/tag/v0.5.5
