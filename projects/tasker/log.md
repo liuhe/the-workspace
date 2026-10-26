@@ -483,3 +483,9 @@
 
 - 色条按下点判定拖动模式提交到 main 并打 tag `v0.5.6`，推送触发 GitHub Actions Release
 - Release 工作流成功（https://github.com/liuhe/the-workspace/actions/runs/40264395923），产物 `tasker-0.5.6.zip` 已挂在 https://github.com/liuhe/the-workspace/releases/tag/v0.5.6
+
+## 2026-10-26 v0.5.6 色条完全失去命中（回退结构）
+
+- 用户反馈 v0.5.6：色条上既无光标提示也无法拖动，按下直接落到下层的"拖动创建"。说明把 `.contentShape + .gesture` 挂在整条 ZStack 容器上、hover 挂在无 contentShape 的 `Color.clear` 子视图上，在 macOS 上整条都收不到事件；原因未能从代码推出，本机也没有鼠标自动化工具可验证
+- 处理：回到 v0.5.5 验证过能命中的拓扑——ZStack 最上层一个 `Color.clear.contentShape(Rectangle()).gesture(...)` 子视图接整条手势；光标改用 `onContinuousHover(coordinateSpace: .local)` 按 x 与边缘区比较切换 resize / openHand，`GanttTrack` 新增 `pushedCursor` 保证 NSCursor 栈每次最多压一个。按下点判定模式的逻辑和 10pt 边缘区不变
+- build 通过；已重启本机 app；用户验证拖动与光标正常后发版

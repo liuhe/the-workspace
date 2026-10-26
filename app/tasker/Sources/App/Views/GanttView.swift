@@ -560,6 +560,7 @@ private struct GanttTrack: View {
     let color: Color
     @Binding var selection: GanttSelection?
     @State private var drag: DragSession?
+    @State private var pushedCursor: NSCursor?
 
     var body: some View {
         GeometryReader { geo in
@@ -628,16 +629,21 @@ private struct GanttTrack: View {
                     .offset(x: 4)
             }
             .allowsHitTesting(false)
-            // 只负责光标提示；手势统一挂在整条上，按下点落在哪个区决定模式，保证光标与行为一致
-            HStack(spacing: 0) {
-                cursorZone(.resizeLeftRight, width: zone)
-                cursorZone(.openHand, width: nil)
-                cursorZone(.resizeLeftRight, width: zone)
-            }
+            // 整条一个命中层：按下点落在哪个区决定模式；光标按同一套边缘区切换，保证光标与行为一致
+            Color.clear
+                .contentShape(Rectangle())
+                .gesture(barGesture(item: item, width: w, x0: x0, x1: x1, zone: zone))
+                .onContinuousHover(coordinateSpace: .local) { phase in
+                    switch phase {
+                    case .active(let p):
+                        let edge = p.x < zone || p.x > bw - zone
+                        setCursor(edge ? .resizeLeftRight : .openHand)
+                    case .ended:
+                        setCursor(nil)
+                    }
+                }
         }
         .frame(width: bw, height: GanttLayout.barHeight)
-        .contentShape(Rectangle())
-        .gesture(barGesture(item: item, width: w, x0: x0, x1: x1, zone: zone))
         .offset(x: x0, y: (GanttLayout.rowHeight - GanttLayout.barHeight) / 2)
         .overlay(alignment: .topLeading) {
             if isDragging {
@@ -666,12 +672,17 @@ private struct GanttTrack: View {
         return "\(title)\n\(TimelineGrid.label(item.start)) – \(endText)"
     }
 
-    private func cursorZone(_ cursor: NSCursor, width: CGFloat?) -> some View {
-        Color.clear
-            .frame(width: width)
-            .onHover { inside in
-                if inside { cursor.push() } else { NSCursor.pop() }
-            }
+    /// 同一时刻最多压入一个光标；切换时先弹出再压入，离开时弹出
+    private func setCursor(_ cursor: NSCursor?) {
+        if let pushed = pushedCursor {
+            if let cursor, cursor === pushed { return }
+            NSCursor.pop()
+            pushedCursor = nil
+        }
+        if let cursor {
+            cursor.push()
+            pushedCursor = cursor
+        }
     }
 
     @ViewBuilder
