@@ -596,11 +596,9 @@ private struct GanttTrack: View {
         let bw = max(x1 - x0, 4)
         let isSelected = selection == .entry(taskId: row.id, entryId: item.id)
         let isDragging = drag?.entryId == item.id
-        let baseTitle = item.entry.title.isEmpty ? "(no title)" : item.entry.title
+        let baseTitle = entryLabel(item)
         // 手动填了实际占用 → 标题前用括号标出
         let titleText = item.entry.actualMinutes.map { "(\(StatsFormat.duration(TimeInterval($0) * 60))) \(baseTitle)" } ?? baseTitle
-        // 条太窄放不下标题时，标题从条左边缘起向右书写，允许超出条本身
-        let labelFits = bw > 56
         ZStack(alignment: .leading) {
             RoundedRectangle(cornerRadius: 4)
                 .fill(color.opacity(item.isOpen ? 0.35 : 0.9))
@@ -611,13 +609,6 @@ private struct GanttTrack: View {
             if isSelected {
                 RoundedRectangle(cornerRadius: 4)
                     .strokeBorder(Color.primary, lineWidth: 2)
-            }
-            if labelFits {
-                Text(titleText)
-                    .font(.caption)
-                    .foregroundStyle(item.isOpen ? Color.primary : Color.white)
-                    .lineLimit(1)
-                    .padding(.horizontal, GanttLayout.handleWidth + 2)
             }
             HStack(spacing: 0) {
                 handle(mode: .resizeStart, item: item, width: w)
@@ -632,15 +623,22 @@ private struct GanttTrack: View {
         }
         .frame(width: bw, height: GanttLayout.barHeight)
         .overlay(alignment: .leading) {
-            if !labelFits {
+            // 标题完整显示，不截断：条内放得下就放条内；放不下时从条左边缘起向右书写，允许超出条本身
+            ViewThatFits(in: .horizontal) {
+                Text(titleText)
+                    .font(.caption)
+                    .foregroundStyle(item.isOpen ? Color.primary : Color.white)
+                    .lineLimit(1)
+                    .fixedSize()
+                    .padding(.horizontal, GanttLayout.handleWidth + 2)
                 Text(titleText)
                     .font(.caption)
                     .foregroundStyle(.primary)
                     .lineLimit(1)
                     .fixedSize()
                     .offset(x: 4)
-                    .allowsHitTesting(false)
             }
+            .allowsHitTesting(false)
         }
         .offset(x: x0, y: (GanttLayout.rowHeight - GanttLayout.barHeight) / 2)
         .overlay(alignment: .topLeading) {
@@ -658,8 +656,14 @@ private struct GanttTrack: View {
         .zIndex(isDragging ? 2 : (isSelected ? 1 : 0))
     }
 
+    /// 色条上显示的文字：时间记录有标题用记录标题，否则回退到任务标题
+    private func entryLabel(_ item: GanttTimedEntry) -> String {
+        if !item.entry.title.isEmpty { return item.entry.title }
+        return row.task.meta.title.isEmpty ? "(Untitled)" : row.task.meta.title
+    }
+
     private func helpText(_ item: GanttTimedEntry) -> String {
-        let title = item.entry.title.isEmpty ? "(no title)" : item.entry.title
+        let title = entryLabel(item)
         let endText = item.isOpen ? "…" : TimelineGrid.label(item.end)
         return "\(title)\n\(TimelineGrid.label(item.start)) – \(endText)"
     }

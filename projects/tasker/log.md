@@ -435,3 +435,10 @@
 
 - 侧栏加号菜单提交到 main 并打 tag `v0.5.2`，推送触发 GitHub Actions Release
 - Release 工作流成功（https://github.com/liuhe/the-workspace/actions/runs/40259235712），产物 `tasker-0.5.2.zip` 已挂在 https://github.com/liuhe/the-workspace/releases/tag/v0.5.2
+
+## 2026-10-26 甘特图色条无标题时回退到任务标题
+
+- `GanttView` 新增 `entryLabel(_:)`：时间记录标题为空时色条文字和悬停提示都改用任务标题（任务也无标题才显示 `(Untitled)`），替换原 `(no title)`
+- 用户追加：色条标题被 `...` 截断。原逻辑条宽 > 56 时标签放条内受 `lineLimit(1)` 截断，仅更窄的条才溢出显示
+- 改为 `.overlay` 内 `ViewThatFits(in: .horizontal)`：第一候选条内白字（`fixedSize` + 两侧 handle 留白），放不下自动落到第二候选——从条左缘起 primary 色向右溢出；去掉 56 阈值；标签 `allowsHitTesting(false)` 不挡拖拽手势
+- build 通过；check 45 全绿；已重启本机 app；未提交、未发版
