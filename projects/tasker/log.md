@@ -478,3 +478,8 @@
 - 用户反馈：光标已变成左右箭头，按下后却常变成整体拖动。resize 计算本身无误（起点改动时终点不动），问题在命中：三个手势分别挂在 7pt 把手和条身三个子视图上，按下落到哪个子视图决定模式
 - 改法：`GanttTrack.bar` 整条 `.contentShape(Rectangle()).gesture(barGesture(item:width:x0:x1:zone:))`，首次 onChanged 用 `value.startLocation.x` 对比静止时的 x0/x1 判定 resizeStart / resizeEnd / move；`handleWidth` 7 → 10 作为边缘区宽度，窄条取 `bw/3`；原把手改成只负责光标的 `cursorZone`，宽度与判定区一致；条内标题左右留白改固定 6pt
 - build 通过；check 45 全绿；已重启本机 app；未提交、未发版
+
+## 2026-10-26 发布 v0.5.6
+
+- 色条按下点判定拖动模式提交到 main 并打 tag `v0.5.6`，推送触发 GitHub Actions Release
+- Release 工作流成功（https://github.com/liuhe/the-workspace/actions/runs/40264395923），产物 `tasker-0.5.6.zip` 已挂在 https://github.com/liuhe/the-workspace/releases/tag/v0.5.6
