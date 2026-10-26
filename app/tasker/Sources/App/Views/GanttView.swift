@@ -613,6 +613,24 @@ private struct GanttTrack: View {
                 RoundedRectangle(cornerRadius: 4)
                     .strokeBorder(Color.primary, lineWidth: 2)
             }
+            // 整条一个命中层：按下点落在哪个区决定模式；光标按同一套边缘区切换，保证光标与行为一致
+            Color.clear
+                .contentShape(Rectangle())
+                .gesture(barGesture(item: item, width: w, x0: x0, x1: x1, zone: zone))
+                .onContinuousHover(coordinateSpace: .local) { phase in
+                    switch phase {
+                    case .active(let p):
+                        let edge = p.x < zone || p.x > bw - zone
+                        setCursor(edge ? .resizeLeftRight : .openHand)
+                    case .ended:
+                        setCursor(nil)
+                    }
+                }
+        }
+        .frame(width: bw, height: GanttLayout.barHeight, alignment: .leading)
+        // 标签必须放在 overlay 里：fixedSize 的溢出文字若作为 ZStack 子视图会把 ZStack 撑宽，
+        // 外层 frame 居中对齐后整条（色块 + 命中层）会向左偏移半个溢出量
+        .overlay(alignment: .leading) {
             // 标题完整显示，不截断：条内放得下就放条内；放不下时从条左边缘起向右书写，允许超出条本身
             ViewThatFits(in: .horizontal) {
                 Text(titleText)
@@ -629,21 +647,7 @@ private struct GanttTrack: View {
                     .offset(x: 4)
             }
             .allowsHitTesting(false)
-            // 整条一个命中层：按下点落在哪个区决定模式；光标按同一套边缘区切换，保证光标与行为一致
-            Color.clear
-                .contentShape(Rectangle())
-                .gesture(barGesture(item: item, width: w, x0: x0, x1: x1, zone: zone))
-                .onContinuousHover(coordinateSpace: .local) { phase in
-                    switch phase {
-                    case .active(let p):
-                        let edge = p.x < zone || p.x > bw - zone
-                        setCursor(edge ? .resizeLeftRight : .openHand)
-                    case .ended:
-                        setCursor(nil)
-                    }
-                }
         }
-        .frame(width: bw, height: GanttLayout.barHeight)
         .offset(x: x0, y: (GanttLayout.rowHeight - GanttLayout.barHeight) / 2)
         .overlay(alignment: .topLeading) {
             if isDragging {

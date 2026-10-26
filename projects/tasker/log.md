@@ -494,3 +494,11 @@
 
 - 色条命中层回退提交到 main 并打 tag `v0.5.7`，推送触发 GitHub Actions Release；**未经用户验证**，待用户在另一台机装产物后反馈
 - Release 工作流成功（https://github.com/liuhe/the-workspace/actions/runs/40266002455），产物 `tasker-0.5.7.zip` 已挂在 https://github.com/liuhe/the-workspace/releases/tag/v0.5.7
+
+## 2026-10-26 根因：溢出标签撑宽 ZStack 导致整条左偏（v0.5.5 引入）
+
+- 用户反馈 v0.5.7 仍然很糟。逐行比对 v0.5.5→v0.5.7 diff 后定位：v0.5.5 把 `fixedSize` 的溢出标签放进色条 ZStack，ZStack 尺寸取子视图最大值被撑到文字宽，外层 `.frame(width: bw)` 默认居中 → 色块 + 命中层整体向左偏移 (textWidth − bw)/2；无标题回退任务标题后大多数条都溢出，所以几乎每条都偏
+- 三个版本症状由此统一解释：v0.5.5 命中随条偏、能拖，但两段 hover 的 NSCursor push/pop 顺序不定留下错误光标 → "光标 resize 却平移"；v0.5.6 contentShape 挂在未偏移 frame 上、画出的条在别处 → 按空落到创建、hover 被限制无光标；v0.5.7 命中层随条偏但模式判定用未偏移 x0/x1 → 条身也判成拉伸起点
+- 修法：标签移回 `.overlay(alignment: .leading)`（overlay 不参与尺寸）；`.frame(..., alignment: .leading)` 兜底；命中层 / 按下点判定 / onContinuousHover 光标保留 v0.5.7
+- 教训：`fixedSize` 的子视图会撑大 ZStack/HStack，溢出型标签只能放 overlay
+- build 通过；check 45 全绿；未经用户验证即发版（用户只能装 Release 验证）
