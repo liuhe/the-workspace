@@ -653,6 +653,12 @@ private struct GanttTrack: View {
             }
         }
         .help(helpText(item))
+        .contextMenu {
+            Button("Delete entry", role: .destructive) {
+                if selection == .entry(taskId: row.id, entryId: item.id) { selection = nil }
+                store.deleteEntry(taskId: row.id, entryId: item.id)
+            }
+        }
         .zIndex(isDragging ? 2 : (isSelected ? 1 : 0))
     }
 
@@ -970,6 +976,13 @@ private struct GanttInspector: View {
                     Text("in progress").foregroundStyle(.secondary)
                 }
                 ActualMinutesField(taskId: task.id, entry: entry)
+                Button {
+                    selection = nil
+                    store.deleteEntry(taskId: task.id, entryId: entry.id)
+                } label: { Image(systemName: "trash") }
+                .buttonStyle(.plain)
+                .foregroundStyle(.red)
+                .help("Delete entry")
                 closeButton
     }
 }

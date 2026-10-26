@@ -448,3 +448,10 @@
 - 色条标题回退任务标题 + 不截断提交到 main 并打 tag `v0.5.3`，推送触发 GitHub Actions Release
 - 补丁号：甘特图单窗口的显示修正，不升次版本号
 - Release 工作流成功（https://github.com/liuhe/the-workspace/actions/runs/40261592408），产物 `tasker-0.5.3.zip` 已挂在 https://github.com/liuhe/the-workspace/releases/tag/v0.5.3
+
+## 2026-10-26 甘特图删除时间记录
+
+- 用例对齐主窗口记录列表：红色垃圾桶直接删、不弹确认；Store 已有 `deleteEntry(taskId:entryId:)`，领域层无改动
+- `GanttView`：底部记录编辑条在实际占用字段后加垃圾桶按钮（删前清空 selection）；色条加 `.contextMenu` 一项 Delete entry（若删的正是选中记录同样清空 selection）
+- overview 色条选中说明、tasks 列表已同步
+- build 通过；check 45 全绿；已重启本机 app；未提交、未发版
