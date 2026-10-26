@@ -5,6 +5,7 @@ import TaskerDomain
 struct SidebarView: View {
     @EnvironmentObject var store: WorkspaceStore
     @State private var showingNewTaskSheet = false
+    @State private var showingBacklogPicker = false
     @State private var showingDayPickerForFilter = false
     @State private var showingSettings = false
     @State private var pushingFromDay: Day?
@@ -15,11 +16,18 @@ struct SidebarView: View {
             HStack(spacing: 8) {
                 FilterMenu(showingDayPicker: $showingDayPickerForFilter,
                            pushingFromDay: $pushingFromDay)
-                Button {
-                    showingNewTaskSheet = true
+                // 加号菜单：新建任务 / 从 Backlog 挑任务加入当前上下文那天
+                // （Backlog 范围、所有日期下未选中某天的行时，第二项不可用）
+                Menu {
+                    Button("New task…") { showingNewTaskSheet = true }
+                        .keyboardShortcut("n", modifiers: [.command])
+                    Button("Add from Backlog…") { showingBacklogPicker = true }
+                        .disabled(backlogTargetDay == nil)
                 } label: { Image(systemName: "plus") }
-                .keyboardShortcut("n", modifiers: [.command])
-                .help("New task")
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help("Add a task")
                 Spacer()
                 if store.scope == .allDays {
                     CollapseAllButton()
@@ -52,6 +60,13 @@ struct SidebarView: View {
         .sheet(isPresented: $showingNewTaskSheet) {
             NewTaskSheet(isPresented: $showingNewTaskSheet)
         }
+        .sheet(isPresented: $showingBacklogPicker) {
+            if let day = backlogTargetDay {
+                BacklogPickerSheet(isPresented: $showingBacklogPicker, day: day) { ids in
+                    if let first = ids.first { store.selectTask(id: first, context: .day(day)) }
+                }
+            }
+        }
         .sheet(isPresented: $showingDayPickerForFilter) {
             DayPickerSheet(isPresented: $showingDayPickerForFilter,
                            daysWithTasks: store.daysWithTasks,
@@ -76,6 +91,12 @@ struct SidebarView: View {
         .onReceive(NotificationCenter.default.publisher(for: .newTaskRequested)) { _ in
             showingNewTaskSheet = true
         }
+    }
+
+    /// "从 Backlog 加入"的目标日：当前上下文是某天时即那天（某天范围 / 所有日期下选中某天的行），否则无
+    private var backlogTargetDay: Day? {
+        if case .day(let d) = store.contextFilter { return d }
+        return nil
     }
 }
 
