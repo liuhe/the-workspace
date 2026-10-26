@@ -502,3 +502,9 @@
 - 修法：标签移回 `.overlay(alignment: .leading)`（overlay 不参与尺寸）；`.frame(..., alignment: .leading)` 兜底；命中层 / 按下点判定 / onContinuousHover 光标保留 v0.5.7
 - 教训：`fixedSize` 的子视图会撑大 ZStack/HStack，溢出型标签只能放 overlay
 - build 通过；check 45 全绿；未经用户验证即发版（用户只能装 Release 验证）
+
+## 2026-10-26 发布 v0.5.8
+
+- 用户补充 v0.5.7 的症状是"不稳定，有时可以有时不行"——与根因一致：标题放得下的条无偏移、正常；标题溢出的条左偏、按下点与判定区错位
+- 色条左偏修复提交到 main 并打 tag `v0.5.8`，推送触发 GitHub Actions Release；待用户在另一台机验证
+- Release 工作流成功（https://github.com/liuhe/the-workspace/actions/runs/40266583453），产物 `tasker-0.5.8.zip` 已挂在 https://github.com/liuhe/the-workspace/releases/tag/v0.5.8
