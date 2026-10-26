@@ -442,3 +442,9 @@
 - 用户追加：色条标题被 `...` 截断。原逻辑条宽 > 56 时标签放条内受 `lineLimit(1)` 截断，仅更窄的条才溢出显示
 - 改为 `.overlay` 内 `ViewThatFits(in: .horizontal)`：第一候选条内白字（`fixedSize` + 两侧 handle 留白），放不下自动落到第二候选——从条左缘起 primary 色向右溢出；去掉 56 阈值；标签 `allowsHitTesting(false)` 不挡拖拽手势
 - build 通过；check 45 全绿；已重启本机 app；未提交、未发版
+
+## 2026-10-26 发布 v0.5.3
+
+- 色条标题回退任务标题 + 不截断提交到 main 并打 tag `v0.5.3`，推送触发 GitHub Actions Release
+- 补丁号：甘特图单窗口的显示修正，不升次版本号
+- Release 工作流成功（https://github.com/liuhe/the-workspace/actions/runs/40261592408），产物 `tasker-0.5.3.zip` 已挂在 https://github.com/liuhe/the-workspace/releases/tag/v0.5.3
