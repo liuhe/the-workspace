@@ -56,6 +56,7 @@
   - 内存改动 → 同步写盘（写盘前先校验磁盘版本，避免覆盖手改）
   - 定时扫盘（~10s）把外部手改同步回内存
 - **代码风格**：DDD（聚合根 = Task；DayAssignment 是任务↔日期关联；TimeEntry 作为 DayAssignment 内实体；TaskCollection 是查询/视图）
+- **验证方式**：用户不在 sk502（本仓库所在机）上使用 app，只能在另一台机安装 GitHub Release 产物后验证。因此 UI 交互改动的验证前提是发版；sk502 上 `swift build` / `taskerCheck` 只是构建自检，重启本机 app 对用户验证无意义。AI 不得把"已重启本机 app"或"用户说发"当成已验证
 
 ## UI 布局
 
