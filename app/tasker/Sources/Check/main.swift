@@ -340,6 +340,28 @@ check("recurring tasks always appear in backlog even if globally done") {
     try expectEqual(backlog, ["R"])  // 只有循环任务留下
 }
 
+check("backlogCandidates: excludes done and already-on-day, keyword matches title case-insensitively") {
+    let d = Day(year: 2026, month: 10, day: 26)
+    let other = Day(year: 2026, month: 10, day: 20)
+    let doneEntry = TimeEntry(startAt: Date(), endAt: Date(), marker: .done)
+    let open = TaskAggregate(meta: TaskMeta(title: "Write Report"))
+    let onDay = TaskAggregate(meta: TaskMeta(title: "Report review", membership: Membership(
+        dayAssignments: [DayAssignment(day: d)]
+    )))
+    let elsewhere = TaskAggregate(meta: TaskMeta(title: "Other thing", membership: Membership(
+        dayAssignments: [DayAssignment(day: other, priority: .important)]
+    )))
+    let done = TaskAggregate(meta: TaskMeta(title: "Report done", membership: Membership(
+        dayAssignments: [DayAssignment(day: other)]
+    )), entries: [doneEntry])
+    let all = [open, onDay, elsewhere, done]
+    let noKeyword = TaskQueries.backlogCandidates(forDay: d, matching: "", in: all).map(\.meta.title)
+    try expectEqual(Set(noKeyword), ["Write Report", "Other thing"])
+    let kw = TaskQueries.backlogCandidates(forDay: d, matching: "  report ", in: all).map(\.meta.title)
+    try expectEqual(kw, ["Write Report"])
+    try expectEqual(TaskQueries.backlogCandidates(forDay: d, matching: "zzz", in: all).count, 0)
+}
+
 check("pushUncompleted respects per-day status for recurring") {
     let src = Day(year: 2026, month: 7, day: 11)
     // 循环任务在 src 已完成

@@ -409,3 +409,16 @@
 - 本机 `gh` 未登录，运行状态用公开 API 查看
 - Release 工作流成功，产物 `tasker-0.5.0.zip` 已挂在 https://github.com/liuhe/the-workspace/releases/tag/v0.5.0
 
+## 2026-10-26 甘特图加号菜单 + 从 Backlog 加入当天
+
+- 领域层新增 `TaskQueries.backlogCandidates(forDay:matching:in:)`：Backlog 过滤结果中去掉已关联那天的任务，关键词去首尾空白后按标题 `localizedCaseInsensitiveContains` 匹配
+- Store：`addToDay(id:day:from:)` 增加显式上下文参数（缺省仍用侧栏 `contextFilter`），从 Backlog 挑选时传 `.backlog`，优先级沿用 Backlog 上下文规则（最后一天关联的优先级）
+- 甘特图标题行：原 plus 按钮改为 `Menu`（`borderlessButton` + 隐藏指示器），两项 New task… / Add from Backlog…；第二个 sheet 挂在 `.background(Color.clear.sheet)` 上避免同一视图两个 sheet
+- 新文件 `Views/BacklogPickerSheet.swift`：TextField 过滤 + 多选 List + 空态提示 + 选中计数；回车 / Add / 双击三种加入方式；关键词变化时剔除已不可见的选中项
+- 新增 check 1 项（45 全绿）；build 通过；已重启本机 app；未提交
+
+
+## 2026-10-26 发布 v0.5.1
+
+- 甘特图加号菜单 + Backlog 选择弹框提交到 main 并打 tag `v0.5.1`，推送触发 GitHub Actions Release
+- 补丁号：单个窗口的交互增强，不升次版本号

@@ -69,6 +69,18 @@ public enum TaskQueries {
         return sortForDisplay(filtered, in: filter)
     }
 
+    /// 从 Backlog 加入某天的候选：Backlog 过滤结果中尚未关联 `day` 的任务；
+    /// `keyword` 去首尾空白后非空时按标题不分大小写子串匹配。顺序沿用 Backlog 排序。
+    public static func backlogCandidates(forDay day: Day,
+                                         matching keyword: String,
+                                         in tasks: [TaskAggregate]) -> [TaskAggregate] {
+        let kw = keyword.trimmingCharacters(in: .whitespaces)
+        return apply(.backlog, to: tasks).filter { t in
+            guard !t.meta.membership.days.contains(day) else { return false }
+            return kw.isEmpty || t.meta.title.localizedCaseInsensitiveContains(kw)
+        }
+    }
+
     /// 排序规则：
     /// - `.day(d)`：先看当天最早 `startAt`（有的靠前、按升序；都没有则并列进入下一档），再按 priority，最后 updatedAt 降序
     /// - `.backlog`：按 priority，再按 updatedAt 降序（时间排序不适用）

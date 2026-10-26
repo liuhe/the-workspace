@@ -262,10 +262,11 @@ final class WorkspaceStore: ObservableObject {
         }
     }
 
-    func addToDay(id: UUID, day: Day) {
+    /// 把任务加入某天；优先级复制自 `context`（缺省为侧栏当前上下文；甘特图从 Backlog 挑选时显式传 .backlog）
+    func addToDay(id: UUID, day: Day, from context: TaskFilter? = nil) {
         guard let task = tasks.first(where: { $0.id == id }) else { return }
         let wasAssigned = task.meta.membership.days.contains(day)
-        let sourcePriority = task.priority(in: contextFilter)
+        let sourcePriority = task.priority(in: context ?? contextFilter)
         let saved = updateMeta(id: id) { $0.membership.upsertDay(day, priority: sourcePriority) }
         if saved && !wasAssigned { clearCompletedDay(day) }
     }

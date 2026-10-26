@@ -138,6 +138,7 @@ struct GanttView: View {
     @State private var manualRange: VisibleRange?
     @State private var selection: GanttSelection?
     @State private var showingNewTaskSheet = false
+    @State private var showingBacklogPicker = false
     /// 开启后：有多条已开始记录的任务，每条记录单独占一行（任务行留空用于新建）
     @AppStorage("tasker.gantt.rowPerEntry") private var rowPerEntry = false
     /// 开启后：选中任务时窗口下方变成任务详情编辑区（默认占 1/3，可拖动分隔条调整）
@@ -279,15 +280,28 @@ struct GanttView: View {
             }
             Text(day.weekdayLabel() + (store.isDayCompleted(day) ? " ✓" : ""))
                 .foregroundStyle(.secondary)
-            Button {
-                showingNewTaskSheet = true
+            // 加号菜单：新建任务 / 从 Backlog 挑任务加入这一天
+            Menu {
+                Button("New task…") { showingNewTaskSheet = true }
+                Button("Add from Backlog…") { showingBacklogPicker = true }
             } label: { Image(systemName: "plus") }
-            .help("New task on this day")
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help("Add a task to this day")
             .sheet(isPresented: $showingNewTaskSheet) {
                 NewTaskSheet(isPresented: $showingNewTaskSheet, targetDay: day) { id in
                     selection = .task(id)
                 }
             }
+            .background(
+                // 第二个 sheet 挂在独立视图上，避免同一视图两个 sheet 互相干扰
+                Color.clear.sheet(isPresented: $showingBacklogPicker) {
+                    BacklogPickerSheet(isPresented: $showingBacklogPicker, day: day) { ids in
+                        if let first = ids.first { selection = .task(first) }
+                    }
+                }
+            )
             Spacer()
             Toggle("Row per entry", isOn: $rowPerEntry)
                 .toggleStyle(.switch)
