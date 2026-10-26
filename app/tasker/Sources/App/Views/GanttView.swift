@@ -610,19 +610,6 @@ private struct GanttTrack: View {
                 RoundedRectangle(cornerRadius: 4)
                     .strokeBorder(Color.primary, lineWidth: 2)
             }
-            HStack(spacing: 0) {
-                handle(mode: .resizeStart, item: item, width: w)
-                Color.clear
-                    .contentShape(Rectangle())
-                    .gesture(barGesture(mode: .move, item: item, width: w))
-                    .onHover { inside in
-                        if inside { NSCursor.openHand.push() } else { NSCursor.pop() }
-                    }
-                handle(mode: .resizeEnd, item: item, width: w)
-            }
-        }
-        .frame(width: bw, height: GanttLayout.barHeight)
-        .overlay(alignment: .leading) {
             // 标题完整显示，不截断：条内放得下就放条内；放不下时从条左边缘起向右书写，允许超出条本身
             ViewThatFits(in: .horizontal) {
                 Text(titleText)
@@ -639,7 +626,18 @@ private struct GanttTrack: View {
                     .offset(x: 4)
             }
             .allowsHitTesting(false)
+            HStack(spacing: 0) {
+                handle(mode: .resizeStart, item: item, width: w)
+                Color.clear
+                    .contentShape(Rectangle())
+                    .gesture(barGesture(mode: .move, item: item, width: w))
+                    .onHover { inside in
+                        if inside { NSCursor.openHand.push() } else { NSCursor.pop() }
+                    }
+                handle(mode: .resizeEnd, item: item, width: w)
+            }
         }
+        .frame(width: bw, height: GanttLayout.barHeight)
         .offset(x: x0, y: (GanttLayout.rowHeight - GanttLayout.barHeight) / 2)
         .overlay(alignment: .topLeading) {
             if isDragging {
@@ -653,12 +651,6 @@ private struct GanttTrack: View {
             }
         }
         .help(helpText(item))
-        .contextMenu {
-            Button("Delete entry", role: .destructive) {
-                if selection == .entry(taskId: row.id, entryId: item.id) { selection = nil }
-                store.deleteEntry(taskId: row.id, entryId: item.id)
-            }
-        }
         .zIndex(isDragging ? 2 : (isSelected ? 1 : 0))
     }
 
