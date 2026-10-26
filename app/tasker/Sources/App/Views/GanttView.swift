@@ -11,7 +11,8 @@ enum GanttLayout {
     static let durationWidth: CGFloat = 60
     static let rowHeight: CGFloat = 32
     static let barHeight: CGFloat = 20
-    static let handleWidth: CGFloat = 7
+    /// 条两端可拉伸的边缘区宽度（窄条按 1/3 条宽缩小）
+    static let handleWidth: CGFloat = 10
     static let rulerHeight: CGFloat = 26
     static let columnSpacing: CGFloat = 8
 }
@@ -596,6 +597,7 @@ private struct GanttTrack: View {
         let bw = max(x1 - x0, 4)
         let isSelected = selection == .entry(taskId: row.id, entryId: item.id)
         let isDragging = drag?.entryId == item.id
+        let zone = min(GanttLayout.handleWidth, bw / 3)
         let baseTitle = entryLabel(item)
         // 手动填了实际占用 → 标题前用括号标出
         let titleText = item.entry.actualMinutes.map { "(\(StatsFormat.duration(TimeInterval($0) * 60))) \(baseTitle)" } ?? baseTitle
@@ -617,7 +619,7 @@ private struct GanttTrack: View {
                     .foregroundStyle(item.isOpen ? Color.primary : Color.white)
                     .lineLimit(1)
                     .fixedSize()
-                    .padding(.horizontal, GanttLayout.handleWidth + 2)
+                    .padding(.horizontal, 6)
                 Text(titleText)
                     .font(.caption)
                     .foregroundStyle(.primary)
@@ -626,18 +628,16 @@ private struct GanttTrack: View {
                     .offset(x: 4)
             }
             .allowsHitTesting(false)
+            // 只负责光标提示；手势统一挂在整条上，按下点落在哪个区决定模式，保证光标与行为一致
             HStack(spacing: 0) {
-                handle(mode: .resizeStart, item: item, width: w)
-                Color.clear
-                    .contentShape(Rectangle())
-                    .gesture(barGesture(mode: .move, item: item, width: w))
-                    .onHover { inside in
-                        if inside { NSCursor.openHand.push() } else { NSCursor.pop() }
-                    }
-                handle(mode: .resizeEnd, item: item, width: w)
+                cursorZone(.resizeLeftRight, width: zone)
+                cursorZone(.openHand, width: nil)
+                cursorZone(.resizeLeftRight, width: zone)
             }
         }
         .frame(width: bw, height: GanttLayout.barHeight)
+        .contentShape(Rectangle())
+        .gesture(barGesture(item: item, width: w, x0: x0, x1: x1, zone: zone))
         .offset(x: x0, y: (GanttLayout.rowHeight - GanttLayout.barHeight) / 2)
         .overlay(alignment: .topLeading) {
             if isDragging {
@@ -666,13 +666,11 @@ private struct GanttTrack: View {
         return "\(title)\n\(TimelineGrid.label(item.start)) – \(endText)"
     }
 
-    private func handle(mode: DragSession.Mode, item: GanttTimedEntry, width w: CGFloat) -> some View {
+    private func cursorZone(_ cursor: NSCursor, width: CGFloat?) -> some View {
         Color.clear
-            .frame(width: GanttLayout.handleWidth)
-            .contentShape(Rectangle())
-            .gesture(barGesture(mode: mode, item: item, width: w))
+            .frame(width: width)
             .onHover { inside in
-                if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
+                if inside { cursor.push() } else { NSCursor.pop() }
             }
     }
 
@@ -699,9 +697,18 @@ private struct GanttTrack: View {
 
     // MARK: 手势
 
-    private func barGesture(mode: DragSession.Mode, item: GanttTimedEntry, width w: CGFloat) -> some Gesture {
+    /// x0 / x1：条在静止状态下的左右边缘（track 坐标）；按下点距边缘不超过 zone 即为拉伸，否则整体移动
+    private func barGesture(item: GanttTimedEntry, width w: CGFloat,
+                            x0: CGFloat, x1: CGFloat, zone: CGFloat) -> some Gesture {
         DragGesture(minimumDistance: 0, coordinateSpace: .named("track"))
             .onChanged { value in
+                let mode: DragSession.Mode
+                if let d = drag, d.entryId == item.id, d.mode != .create {
+                    mode = d.mode
+                } else {
+                    let px = value.startLocation.x
+                    mode = px < x0 + zone ? .resizeStart : (px > x1 - zone ? .resizeEnd : .move)
+                }
                 if drag == nil || drag?.entryId != item.id || drag?.mode != mode {
                     drag = DragSession(mode: mode, entryId: item.id, isOpen: item.isOpen,
                                        originStart: item.start, originEnd: item.end,
