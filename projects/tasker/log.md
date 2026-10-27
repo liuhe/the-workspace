@@ -515,3 +515,9 @@
 - UI：新文件 `Views/MoveEntryMenu.swift`（日历图标菜单：前后 3 天 ★/●/✓ 标记、当前所在天置灰 + Choose date… 复用 `DayPickerSheet`）；主窗口 `EntryRow` 垃圾桶前加该菜单，sheet 挂在 `EntriesSection`；甘特图 `GanttInspector` 记录编辑条垃圾桶前加该菜单，移走前清空 selection
 - overview（TimeEntry 规则、详情页记录行、甘特图记录编辑条）/ tasks 已同步
 - build 通过；check 47 全绿（新增 moveEntry 2 项）；未提交、未发版；UI 待用户装 Release 验证
+
+## 2026-10-27 10:05 发布 v0.5.9
+
+- 时间记录移到另一天提交到 main（537a829）并打 tag `v0.5.9`，推送触发 GitHub Actions Release；待用户在另一台机装产物验证
+- Release 工作流成功（https://github.com/liuhe/the-workspace/actions/runs/40432644168），产物 `tasker-0.5.9.zip` 已挂在 https://github.com/liuhe/the-workspace/releases/tag/v0.5.9
+- 本机 `gh` 未登录；查工作流状态改用未认证的公开 REST API（仓库公开可读）
