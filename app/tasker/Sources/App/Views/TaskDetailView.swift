@@ -258,13 +258,30 @@ private struct EntriesSection: View {
             } else {
                 VStack(spacing: 0) {
                     ForEach(entries, id: \.id) { e in
-                        EntryRow(taskId: aggregate.id, entry: e)
+                        EntryRow(aggregate: aggregate, entry: e, day: entryDay) {
+                            movingEntry = EntryRef(taskId: aggregate.id, entryId: e.id)
+                        }
                         Divider()
                     }
                 }
             }
         }
+        // 选任意一天把记录移过去；sheet 挂在 section 上而不是每一行，避免行内 sheet 互相干扰
+        .sheet(item: $movingEntry) { ref in
+            DayPickerSheet(
+                isPresented: Binding(
+                    get: { movingEntry != nil },
+                    set: { if !$0 { movingEntry = nil } }
+                ),
+                daysWithTasks: store.daysWithTasks,
+                completedDays: store.completedDays
+            ) { day in
+                store.moveEntry(taskId: ref.taskId, entryId: ref.entryId, toDay: day)
+            }
+        }
     }
+
+    @State private var movingEntry: EntryRef?
 
     private var entryDay: Day {
         store.entryDay(for: aggregate, in: context)
@@ -273,8 +290,13 @@ private struct EntriesSection: View {
 
 private struct EntryRow: View {
     @EnvironmentObject var store: WorkspaceStore
-    let taskId: UUID
+    let aggregate: TaskAggregate
     let entry: TimeEntry
+    /// 这条记录所在的那天
+    let day: Day
+    let onPickMoveDay: () -> Void
+
+    private var taskId: UUID { aggregate.id }
 
     var body: some View {
         HStack(spacing: 10) {
@@ -298,6 +320,8 @@ private struct EntryRow: View {
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
+
+            MoveEntryMenu(aggregate: aggregate, entryId: entry.id, currentDay: day, onPickDay: onPickMoveDay)
 
             Button {
                 store.deleteEntry(taskId: taskId, entryId: entry.id)

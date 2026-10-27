@@ -420,6 +420,16 @@ final class WorkspaceStore: ObservableObject {
         persist(&agg, at: idx)
     }
 
+    /// 把记录移到另一天；目标日尚未关联该任务时先关联（优先级复制自原来那天），新关联会清掉目标日的完成标记
+    func moveEntry(taskId: UUID, entryId: UUID, toDay day: Day) {
+        guard let idx = tasks.firstIndex(where: { $0.id == taskId }) else { return }
+        var agg = tasks[idx]
+        let wasAssigned = agg.meta.membership.days.contains(day)
+        guard agg.moveEntry(id: entryId, toDay: day) else { return }
+        let saved = persist(&agg, at: idx)
+        if saved && !wasAssigned { clearCompletedDay(day) }
+    }
+
     // MARK: - 设置
 
     func reloadSettings() {

@@ -508,3 +508,10 @@
 - 用户补充 v0.5.7 的症状是"不稳定，有时可以有时不行"——与根因一致：标题放得下的条无偏移、正常；标题溢出的条左偏、按下点与判定区错位
 - 色条左偏修复提交到 main 并打 tag `v0.5.8`，推送触发 GitHub Actions Release；待用户在另一台机验证
 - Release 工作流成功（https://github.com/liuhe/the-workspace/actions/runs/40266583453），产物 `tasker-0.5.8.zip` 已挂在 https://github.com/liuhe/the-workspace/releases/tag/v0.5.8
+
+## 2026-10-27 09:57 时间记录移到另一天
+
+- 模型：`Membership.moveEntry(id:toDay:)` —— 记录从所在某天关联挪到目标日关联；目标日未关联时先 `upsertDay`（优先级复制自原日、不标当前），已关联则不动它的优先级；起止时间日期部分改到目标日、时分不变；原日关联保留；同一天 / 记录不存在 → false。`TaskAggregate.moveEntry` 更新 updatedAt；Store `moveEntry` 新关联时清目标日完成标记（与 addToDay / addEntry 一致）
+- UI：新文件 `Views/MoveEntryMenu.swift`（日历图标菜单：前后 3 天 ★/●/✓ 标记、当前所在天置灰 + Choose date… 复用 `DayPickerSheet`）；主窗口 `EntryRow` 垃圾桶前加该菜单，sheet 挂在 `EntriesSection`；甘特图 `GanttInspector` 记录编辑条垃圾桶前加该菜单，移走前清空 selection
+- overview（TimeEntry 规则、详情页记录行、甘特图记录编辑条）/ tasks 已同步
+- build 通过；check 47 全绿（新增 moveEntry 2 项）；未提交、未发版；UI 待用户装 Release 验证

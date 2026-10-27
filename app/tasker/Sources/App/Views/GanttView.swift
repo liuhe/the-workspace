@@ -852,6 +852,8 @@ private struct GanttInspector: View {
     @EnvironmentObject var store: WorkspaceStore
     let day: Day
     @Binding var selection: GanttSelection?
+    /// 正在通过日历弹框挑目标日的那条记录
+    @State private var movingEntry: EntryRef?
 
     var body: some View {
         HStack(spacing: 10) {
@@ -877,6 +879,20 @@ private struct GanttInspector: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
         .frame(height: 40)
+        .sheet(item: $movingEntry) { ref in
+            DayPickerSheet(
+                isPresented: Binding(
+                    get: { movingEntry != nil },
+                    set: { if !$0 { movingEntry = nil } }
+                ),
+                daysWithTasks: store.daysWithTasks,
+                completedDays: store.completedDays
+            ) { target in
+                guard target != day else { return }
+                selection = nil
+                store.moveEntry(taskId: ref.taskId, entryId: ref.entryId, toDay: target)
+            }
+        }
     }
 
     private var hint: some View {
@@ -990,6 +1006,9 @@ private struct GanttInspector: View {
                     Text("in progress").foregroundStyle(.secondary)
                 }
                 ActualMinutesField(taskId: task.id, entry: entry)
+                MoveEntryMenu(aggregate: task, entryId: entry.id, currentDay: day,
+                              onPickDay: { movingEntry = EntryRef(taskId: task.id, entryId: entry.id) },
+                              beforeMove: { selection = nil })
                 Button {
                     selection = nil
                     store.deleteEntry(taskId: task.id, entryId: entry.id)

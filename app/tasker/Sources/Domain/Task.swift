@@ -137,6 +137,24 @@ public struct Membership: Codable, Hashable, Sendable {
         }
         return false
     }
+
+    /// 把一条记录移到另一天：目标日尚未关联时先建立关联（优先级复制自原来那天，不标当前）；
+    /// 起止时间的日期部分改到目标日、时分不变；原来那天的关联保留（即使记录被移空）。
+    /// 记录不存在或目标日就是原来那天 → false。
+    @discardableResult
+    public mutating func moveEntry(id: UUID, toDay target: Day, calendar: Calendar = .current) -> Bool {
+        guard let sourceIndex = dayAssignments.firstIndex(where: { a in a.entries.contains(where: { $0.id == id }) }),
+              let entryIndex = dayAssignments[sourceIndex].entries.firstIndex(where: { $0.id == id }) else {
+            return false
+        }
+        let source = dayAssignments[sourceIndex]
+        guard source.day != target else { return false }
+        var entry = dayAssignments[sourceIndex].entries.remove(at: entryIndex)
+        entry.startAt = entry.startAt(inDay: target, calendar: calendar)
+        entry.endAt = entry.endAt(inDay: target, calendar: calendar)
+        appendEntry(inDay: target, priority: source.priority, entry: entry)
+        return true
+    }
 }
 
 public struct TaskMeta: Hashable, Identifiable, Sendable {
@@ -296,6 +314,14 @@ public struct TaskAggregate: Identifiable, Sendable, Hashable {
     public mutating func deleteEntry(id: UUID) {
         guard meta.membership.deleteEntry(id: id) else { return }
         meta.updatedAt = Date()
+    }
+
+    /// 见 `Membership.moveEntry`
+    @discardableResult
+    public mutating func moveEntry(id: UUID, toDay day: Day, calendar: Calendar = .current) -> Bool {
+        guard meta.membership.moveEntry(id: id, toDay: day, calendar: calendar) else { return false }
+        meta.updatedAt = Date()
+        return true
     }
 
     /// 重复任务在 `day` 上新建首条 entry 时，尝试从最近一天已完成的记录取时间，

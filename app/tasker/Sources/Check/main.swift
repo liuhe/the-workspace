@@ -379,6 +379,46 @@ check("pushUncompleted respects per-day status for recurring") {
     // 说明：这里不便直接跑 store，仅验证 statusForDay 判定；实际 store 逻辑用 statusForDay
 }
 
+check("moveEntry: moves to another day, creates assignment with source priority, rebases date part") {
+    let d1 = Day(year: 2026, month: 10, day: 20)
+    let d2 = Day(year: 2026, month: 10, day: 22)
+    var agg = TaskAggregate(meta: TaskMeta(title: "M", membership: Membership(
+        dayAssignments: [DayAssignment(day: d1, priority: .important)]
+    )))
+    let id = agg.addEntry(inDay: d1, priority: .important, title: "e")
+    agg.updateEntry(id: id) {
+        $0.startAt = d1.date().addingTimeInterval(9 * 3600)
+        $0.endAt = d1.date().addingTimeInterval(10 * 3600)
+    }
+    try expect(agg.moveEntry(id: id, toDay: d2))
+    try expectEqual(agg.entries(inDay: d1).count, 0)
+    try expectEqual(agg.entries(inDay: d2).map(\.title), ["e"])
+    // 原来那天的关联保留；目标日新建关联，优先级复制自原来那天
+    try expectEqual(agg.meta.membership.days, [d1, d2])
+    try expectEqual(agg.meta.membership.priority(inDay: d2), .important)
+    try expectEqual(agg.meta.membership.isCurrent(inDay: d2), false)
+    // 存储里的日期部分已改到目标日，时分不变
+    let moved = agg.entries(inDay: d2)[0]
+    try expectEqual(moved.startAt, d2.date().addingTimeInterval(9 * 3600))
+    try expectEqual(moved.endAt, d2.date().addingTimeInterval(10 * 3600))
+    // 目标日已有关联时不改它的优先级
+    let d3 = Day(year: 2026, month: 10, day: 23)
+    agg.meta.membership.upsertDay(d3, priority: .todayMustReach)
+    try expect(agg.moveEntry(id: id, toDay: d3))
+    try expectEqual(agg.meta.membership.priority(inDay: d3), .todayMustReach)
+    try expectEqual(agg.entries(inDay: d3).count, 1)
+}
+
+check("moveEntry: same day or unknown entry → false, nothing changes") {
+    let d1 = Day(year: 2026, month: 10, day: 20)
+    var agg = TaskAggregate(meta: TaskMeta(title: "M"))
+    let id = agg.addEntry(inDay: d1, title: "e")
+    let before = agg.meta.membership
+    try expect(!agg.moveEntry(id: id, toDay: d1))
+    try expect(!agg.moveEntry(id: UUID(), toDay: Day(year: 2026, month: 10, day: 21)))
+    try expectEqual(agg.meta.membership, before)
+}
+
 check("group by category respects settings order, renames don't break linkage") {
     let d = Day.today()
     let cat1 = CategoryDef(name: "会议")
