@@ -521,3 +521,12 @@
 - 时间记录移到另一天提交到 main（537a829）并打 tag `v0.5.9`，推送触发 GitHub Actions Release；待用户在另一台机装产物验证
 - Release 工作流成功（https://github.com/liuhe/the-workspace/actions/runs/40432644168），产物 `tasker-0.5.9.zip` 已挂在 https://github.com/liuhe/the-workspace/releases/tag/v0.5.9
 - 本机 `gh` 未登录；查工作流状态改用未认证的公开 REST API（仓库公开可读）
+
+## 2026-11-01 侧栏顶栏日期切换 & 下拉范围
+
+- 用户反馈甘特图的前一天 / 后一天 / Today 好用，要求搬到主页面侧栏顶部日期选择处；并把日期下拉改为过去 10 天到往后 3 天
+- 领域：`Day.adding(days:)` 值对象辅助（Calendar 日加减，返回 Day）
+- UI：`SidebarView` 顶栏改为 `<` + FilterMenu + `>` + Today；`<` / `>` 只在 `.day` 范围下可用（Backlog / 所有日期置灰），Today 任何范围下都把 scope 切到今天。FilterMenu label 去掉内部 Spacer 改 `fixedSize`，否则右侧按钮会被推到最右
+- FilterMenu 日期项 `-3...3` → `-10...3`；Add to 菜单与移记录菜单仍是前后 3 天，未改
+- overview UI 布局 / tasks 已同步
+- build 通过；check 47 全绿；未提交、未发版；UI 待用户装 Release 验证

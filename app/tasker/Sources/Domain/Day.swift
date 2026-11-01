@@ -42,6 +42,13 @@ public struct Day: Codable, Hashable, Sendable, Comparable, CustomStringConverti
         "\(description) \(weekdayLabel())"
     }
 
+    /// 前后 n 天（n 可为负）
+    public func adding(days n: Int, calendar: Calendar = .current) -> Day {
+        let base = date(calendar: calendar)
+        let shifted = calendar.date(byAdding: .day, value: n, to: base) ?? base
+        return Day(date: shifted, calendar: calendar)
+    }
+
     public func date(calendar: Calendar = .current) -> Date {
         var c = DateComponents()
         c.year = year; c.month = month; c.day = day

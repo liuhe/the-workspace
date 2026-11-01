@@ -14,8 +14,20 @@ struct SidebarView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
-                FilterMenu(showingDayPicker: $showingDayPickerForFilter,
-                           pushingFromDay: $pushingFromDay)
+                // 前一天 / 范围下拉 / 后一天 / Today（与甘特图头部一致）；
+                // 前后切换只在某天范围下可用，Today 任何范围下都回到今天
+                HStack(spacing: 4) {
+                    Button { shiftDay(-1) } label: { Image(systemName: "chevron.left") }
+                        .disabled(scopeDay == nil)
+                        .help("Previous day")
+                    FilterMenu(showingDayPicker: $showingDayPickerForFilter,
+                               pushingFromDay: $pushingFromDay)
+                    Button { shiftDay(1) } label: { Image(systemName: "chevron.right") }
+                        .disabled(scopeDay == nil)
+                        .help("Next day")
+                    Button("Today") { store.scope = .day(Day.today()) }
+                        .controlSize(.small)
+                }
                 // 加号菜单：新建任务 / 从 Backlog 挑任务加入当前上下文那天
                 // （Backlog 范围、所有日期下未选中某天的行时，第二项不可用）
                 Menu {
@@ -98,6 +110,17 @@ struct SidebarView: View {
         if case .day(let d) = store.contextFilter { return d }
         return nil
     }
+
+    /// 当前范围是某天时的那天；Backlog / 所有日期下为 nil
+    private var scopeDay: Day? {
+        if case .day(let d) = store.scope { return d }
+        return nil
+    }
+
+    private func shiftDay(_ delta: Int) {
+        guard let d = scopeDay else { return }
+        store.scope = .day(d.adding(days: delta))
+    }
 }
 
 private struct DayWrap: Identifiable {
@@ -159,7 +182,8 @@ private struct FilterMenu: View {
 
     var body: some View {
         Menu {
-            ForEach(-3...3, id: \.self) { offset in
+            // 过去 10 天 → 往后 3 天，升序
+            ForEach(-10...3, id: \.self) { offset in
                 dayItem(day: dayOffset(offset))
             }
             Button("Choose date…") { showingDayPicker = true }
@@ -178,10 +202,10 @@ private struct FilterMenu: View {
             HStack {
                 Text(label).font(.headline)
                 Image(systemName: "chevron.down").font(.caption)
-                Spacer()
             }
         }
         .menuStyle(.borderlessButton)
+        .fixedSize()
     }
 
     private var label: String {
@@ -193,8 +217,7 @@ private struct FilterMenu: View {
     }
 
     private func dayOffset(_ n: Int) -> Day {
-        let d = Calendar.current.date(byAdding: .day, value: n, to: Date()) ?? Date()
-        return Day(date: d)
+        Day.today().adding(days: n)
     }
 
     /// 菜单项：Toggle 让选中日呈现原生勾选态；今天前缀 ★；有任务的日子后缀 ●；已完成日子后缀 ✓
