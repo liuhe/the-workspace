@@ -40,14 +40,15 @@ public enum TaskQueries {
                              currentOnly: Bool = false,
                              hideCompleted: Bool = false,
                              hideNotStarted: Bool = false,
+                             hideDayCompleted: Bool = false,
                              to tasks: [TaskAggregate]) -> [TaskAggregate] {
         var filtered: [TaskAggregate]
         switch filter {
         case .day(let d):
             filtered = tasks.filter { $0.meta.membership.days.contains(d) }
         case .backlog:
-            // Backlog = 未完成任务；循环任务永远在 Backlog
-            filtered = tasks.filter { $0.status != .done || $0.meta.isRecurring }
+            // Backlog = 整体未完成（isDone 为假）的任务；循环任务永远在 Backlog
+            filtered = tasks.filter { !$0.meta.isDone || $0.meta.isRecurring }
         }
         if currentOnly {
             // isCurrent 是 DayAssignment 的属性：
@@ -65,6 +66,10 @@ public enum TaskQueries {
         }
         if hideNotStarted {
             filtered = filtered.filter { $0.status(in: filter) != .notStarted }
+        }
+        if hideDayCompleted {
+            // 只影响 .day(d) 上下文（Backlog 下不会出现 doneForDay）
+            filtered = filtered.filter { $0.status(in: filter) != .doneForDay }
         }
         return sortForDisplay(filtered, in: filter)
     }
@@ -110,7 +115,8 @@ public enum TaskQueries {
                                     categories: [CategoryDef],
                                     currentOnly: Bool = false,
                                     hideCompleted: Bool = false,
-                                    hideNotStarted: Bool = false) -> [DayGroup]
+                                    hideNotStarted: Bool = false,
+                                    hideDayCompleted: Bool = false) -> [DayGroup]
     {
         var days: Set<Day> = []
         for t in tasks { days.formUnion(t.meta.membership.days) }
@@ -121,6 +127,7 @@ public enum TaskQueries {
                                  currentOnly: currentOnly,
                                  hideCompleted: hideCompleted,
                                  hideNotStarted: hideNotStarted,
+                                 hideDayCompleted: hideDayCompleted,
                                  to: tasks)
             guard !filtered.isEmpty else { return nil }
             return DayGroup(context: context,

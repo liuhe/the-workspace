@@ -6,15 +6,19 @@ public struct DayAssignment: Hashable, Sendable {
     public var priority: Priority
     /// 该任务在这一天是否被标记为"当前"
     public var isCurrent: Bool
+    /// 该任务这一天的活是否已完成；任务整体 `isDone` 为真时忽略
+    public var isDone: Bool
     public var entries: [TimeEntry]
 
     public init(day: Day,
                 priority: Priority = .normal,
                 isCurrent: Bool = false,
+                isDone: Bool = false,
                 entries: [TimeEntry] = []) {
         self.day = day
         self.priority = priority
         self.isCurrent = isCurrent
+        self.isDone = isDone
         self.entries = entries.sorted(by: Self.entrySortComparator)
     }
 
@@ -33,13 +37,14 @@ public struct DayAssignment: Hashable, Sendable {
 }
 
 extension DayAssignment: Codable {
-    // entries 是新字段；老数据缺失时默认空数组
-    private enum CodingKeys: String, CodingKey { case day, priority, isCurrent, entries }
+    // entries / isDone 是后加字段；老数据缺失时默认空数组 / false
+    private enum CodingKeys: String, CodingKey { case day, priority, isCurrent, isDone, entries }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.day = try c.decode(Day.self, forKey: .day)
         self.priority = try c.decode(Priority.self, forKey: .priority)
         self.isCurrent = try c.decodeIfPresent(Bool.self, forKey: .isCurrent) ?? false
+        self.isDone = try c.decodeIfPresent(Bool.self, forKey: .isDone) ?? false
         self.entries = try c.decodeIfPresent([TimeEntry].self, forKey: .entries) ?? []
         sortEntries()
     }
@@ -64,6 +69,10 @@ public struct Membership: Codable, Hashable, Sendable {
 
     public func isCurrent(inDay day: Day) -> Bool {
         dayAssignments.first(where: { $0.day == day })?.isCurrent ?? false
+    }
+
+    public func isDone(inDay day: Day) -> Bool {
+        dayAssignments.first(where: { $0.day == day })?.isDone ?? false
     }
 
     public func entries(inDay day: Day) -> [TimeEntry] {
@@ -99,6 +108,13 @@ public struct Membership: Codable, Hashable, Sendable {
     public mutating func setIsCurrent(inDay day: Day, isCurrent: Bool) {
         if let idx = dayAssignments.firstIndex(where: { $0.day == day }) {
             dayAssignments[idx].isCurrent = isCurrent
+        }
+    }
+
+    /// 只对已关联的那天生效；未关联的日子不会因此被建立关联
+    public mutating func setIsDone(inDay day: Day, isDone: Bool) {
+        if let idx = dayAssignments.firstIndex(where: { $0.day == day }) {
+            dayAssignments[idx].isDone = isDone
         }
     }
 
@@ -162,8 +178,10 @@ public struct TaskMeta: Hashable, Identifiable, Sendable {
     public var title: String
     public var categoryId: UUID?
     public var membership: Membership
-    /// 循环任务：done 状态按天独立，且始终出现在 Backlog。
+    /// 循环任务：日常完成按天（DayAssignment.isDone）记录，且始终出现在 Backlog。
     public var isRecurring: Bool
+    /// 任务整体完成；为真时任何上下文下状态都是 done，不再看某天完成标；也决定是否离开 Backlog
+    public var isDone: Bool
 
     public let createdAt: Date
     public var updatedAt: Date
@@ -173,6 +191,7 @@ public struct TaskMeta: Hashable, Identifiable, Sendable {
                 categoryId: UUID? = nil,
                 membership: Membership = Membership(),
                 isRecurring: Bool = false,
+                isDone: Bool = false,
                 createdAt: Date = Date(),
                 updatedAt: Date = Date()) {
         self.id = id
@@ -180,6 +199,7 @@ public struct TaskMeta: Hashable, Identifiable, Sendable {
         self.categoryId = categoryId
         self.membership = membership
         self.isRecurring = isRecurring
+        self.isDone = isDone
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
@@ -188,7 +208,7 @@ public struct TaskMeta: Hashable, Identifiable, Sendable {
 extension TaskMeta: Codable {
     // 新增的可选字段用 decodeIfPresent 兜住；不是"旧格式迁移"，而是新字段用默认值填。
     private enum CodingKeys: String, CodingKey {
-        case id, title, categoryId, membership, isRecurring, createdAt, updatedAt
+        case id, title, categoryId, membership, isRecurring, isDone, createdAt, updatedAt
     }
 
     public init(from decoder: Decoder) throws {
@@ -198,6 +218,7 @@ extension TaskMeta: Codable {
         self.categoryId = try c.decodeIfPresent(UUID.self, forKey: .categoryId)
         self.membership = try c.decode(Membership.self, forKey: .membership)
         self.isRecurring = try c.decodeIfPresent(Bool.self, forKey: .isRecurring) ?? false
+        self.isDone = try c.decodeIfPresent(Bool.self, forKey: .isDone) ?? false
         self.createdAt = try c.decode(Date.self, forKey: .createdAt)
         self.updatedAt = try c.decode(Date.self, forKey: .updatedAt)
     }
@@ -216,31 +237,83 @@ public struct TaskAggregate: Identifiable, Sendable, Hashable {
 
     public var id: UUID { meta.id }
     public var entries: [TimeEntry] { meta.membership.dayAssignments.flatMap(\.entries).sorted(by: Self.entrySortComparator) }
-    /// 全局状态：所有日期关联下的时间记录汇总
-    public var status: TaskStatus { StatusDeriver.derive(from: entries) }
+    /// 全局状态：整体完成标优先；否则按所有日期关联下的时间记录看是否有活动
+    public var status: TaskStatus {
+        meta.isDone ? .done : StatusDeriver.activity(from: entries)
+    }
     public var openEntry: TimeEntry? { entries.first(where: { $0.isOpen }) }
 
     public func entries(inDay day: Day) -> [TimeEntry] {
         meta.membership.entries(inDay: day)
     }
 
-    /// 某天的状态：只看该天关联下的时间记录
+    /// 某天的状态：整体完成 → done；该天完成标 → doneForDay；否则只看该天记录的活动
     public func statusForDay(_ day: Day, calendar: Calendar = .current) -> TaskStatus {
-        StatusDeriver.derive(from: entries(inDay: day))
+        if meta.isDone { return .done }
+        if meta.membership.isDone(inDay: day) { return .doneForDay }
+        return StatusDeriver.activity(from: entries(inDay: day))
     }
 
-    /// 上下文相关的状态：
-    /// - 循环任务在 .day(d) 视图 → statusForDay(d)
-    /// - 循环任务在 Backlog 视图 → notStarted
-    /// - 否则 → 全局 status
+    /// 上下文相关的状态（整体完成在任何上下文都优先）：
+    /// - .day(d)：该天完成标 → doneForDay；否则循环任务看该天记录、非循环任务看全部记录
+    /// - .backlog：循环任务 → notStarted；否则全局 status
     public func status(in filter: TaskFilter) -> TaskStatus {
-        if meta.isRecurring {
-            switch filter {
-            case .day(let d): return statusForDay(d)
-            case .backlog: return .notStarted
+        if meta.isDone { return .done }
+        switch filter {
+        case .day(let d):
+            if meta.isRecurring { return statusForDay(d) }
+            if meta.membership.isDone(inDay: d) { return .doneForDay }
+            return status
+        case .backlog:
+            return meta.isRecurring ? .notStarted : status
+        }
+    }
+
+    /// "推到另一天"的候选判定：循环任务看该天完成标，非循环任务只看整体完成标
+    /// （某天完成只是当天视图的标记，任务还没整体完成就仍要跟进）
+    public func isUnfinished(inDay day: Day) -> Bool {
+        if meta.isRecurring { return !meta.membership.isDone(inDay: day) }
+        return !meta.isDone
+    }
+
+    // MARK: - 完成标命令
+
+    public mutating func setIsDone(_ isDone: Bool, now: Date = Date()) {
+        guard meta.isDone != isDone else { return }
+        meta.isDone = isDone
+        meta.updatedAt = now
+    }
+
+    public mutating func setDayDone(inDay day: Day, isDone: Bool, now: Date = Date()) {
+        guard meta.membership.days.contains(day),
+              meta.membership.isDone(inDay: day) != isDone else { return }
+        meta.membership.setIsDone(inDay: day, isDone: isDone)
+        meta.updatedAt = now
+    }
+
+    /// 历史回填：按旧的 marker 规则（`StatusDeriver.derive`）推导完成标。
+    /// - 每个某天关联：该天记录推出 done → 该天 isDone
+    /// - 非循环任务：全部记录推出 done → 整体 isDone（循环任务不设整体完成）
+    /// 返回是否有任何变化；幂等。
+    @discardableResult
+    public mutating func backfillDoneFlags(now: Date = Date()) -> Bool {
+        var changed = false
+        for idx in meta.membership.dayAssignments.indices {
+            let derived = StatusDeriver.derive(from: meta.membership.dayAssignments[idx].entries, now: now) == .done
+            if meta.membership.dayAssignments[idx].isDone != derived {
+                meta.membership.dayAssignments[idx].isDone = derived
+                changed = true
             }
         }
-        return status
+        if !meta.isRecurring {
+            let derived = StatusDeriver.derive(from: entries, now: now) == .done
+            if meta.isDone != derived {
+                meta.isDone = derived
+                changed = true
+            }
+        }
+        if changed { meta.updatedAt = now }
+        return changed
     }
 
     /// 上下文相关的优先级（用于列表展示、排序）
@@ -284,7 +357,9 @@ public struct TaskAggregate: Identifiable, Sendable, Hashable {
             throw TaskCommandError.entryAlreadyStarted
         }
         if openEntry != nil { throw TaskCommandError.alreadyInProgress }
-        let wasDone = meta.isRecurring ? statusForDay(day) == .done : status == .done
+        // 在已完成（整体或当天）的任务上再开始 → 记录打"再开始"阶段标；完成标本身不自动清除
+        let before = status(in: .day(day))
+        let wasDone = before == .done || before == .doneForDay
         _ = meta.membership.updateEntry(id: id) { entry in
             entry.startAt = now
             if wasDone { entry.marker = .restart }

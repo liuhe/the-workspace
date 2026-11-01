@@ -23,6 +23,7 @@ struct SettingsView: View {
             Text("Settings").font(.title2)
 
             DataRootSection()
+            MaintenanceSection()
 
             HStack(alignment: .top, spacing: 20) {
                 ListEditor(title: "Categories", items: $categories, showsColor: true)
@@ -95,6 +96,29 @@ private struct DataRootSection: View {
         panel.prompt = "Choose data directory"
         if panel.runModal() == .OK, let url = panel.url {
             store.setDataRoot(url)
+        }
+    }
+}
+
+// MARK: - 维护操作
+
+/// 历史完成标回填：按旧 marker 规则推导任务整体 / 某天完成标（见 TaskAggregate.backfillDoneFlags）
+private struct MaintenanceSection: View {
+    @EnvironmentObject var store: WorkspaceStore
+    @State private var result: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Maintenance").font(.headline)
+            HStack {
+                Button("Backfill done flags from entry markers") {
+                    let n = store.backfillDoneFlags()
+                    result = n == 0 ? "No changes." : "Updated \(n) task\(n == 1 ? "" : "s")."
+                }
+                if let result { Text(result).foregroundStyle(.secondary) }
+            }
+            Text("Uses the legacy rule (last marked entry is “Done” → done) to set the task done flag (non-recurring tasks) and each day's done flag. Safe to run again.")
+                .font(.caption).foregroundStyle(.secondary)
         }
     }
 }

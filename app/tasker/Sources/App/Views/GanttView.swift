@@ -492,9 +492,11 @@ private struct GanttTaskRowView: View {
 
     @ViewBuilder
     private var statusMark: some View {
-        switch row.task.statusForDay(row.day) {
+        switch row.task.status(in: .day(row.day)) {
         case .done:
             Image(systemName: "checkmark").font(.caption2).foregroundStyle(.secondary)
+        case .doneForDay:
+            Image(systemName: "checkmark.circle").font(.caption2).foregroundStyle(.secondary)
         case .inProgress:
             Circle().fill(Color.accentColor).frame(width: 6, height: 6)
         case .notStarted:

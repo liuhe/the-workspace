@@ -29,8 +29,19 @@ func expectThrows(_ body: () throws -> Void, file: StaticString = #file, line: U
 let taskId = UUID()
 let t0 = Date(timeIntervalSince1970: 1_700_000_000)
 
-// MARK: - StatusDeriver
+// MARK: - StatusDeriver（derive = 旧 marker 规则，仅回填用；activity = 现行活动态规则）
 print("StatusDeriver")
+
+check("activity: no entries → notStarted; any past/unstarted entry → inProgress; marker ignored; future ignored") {
+    try expectEqual(StatusDeriver.activity(from: []), .notStarted)
+    let unstarted = TimeEntry()
+    try expectEqual(StatusDeriver.activity(from: [unstarted]), .inProgress)
+    let done = TimeEntry(startAt: Date(timeIntervalSinceNow: -7200), endAt: Date(timeIntervalSinceNow: -3600), marker: .done)
+    try expectEqual(StatusDeriver.activity(from: [done]), .inProgress)
+    let now = Date()
+    let future = TimeEntry(startAt: now.addingTimeInterval(3600))
+    try expectEqual(StatusDeriver.activity(from: [future], now: now), .notStarted)
+}
 
 check("no entries → notStarted") {
     try expectEqual(StatusDeriver.derive(from: []), .notStarted)
@@ -78,10 +89,11 @@ print("TaskAggregate")
 func makeTask() -> TaskAggregate { TaskAggregate(meta: TaskMeta(title: "T")) }
 let checkDay = Day(year: 2026, month: 7, day: 11)
 
-check("addEntry doesn't affect status when there was no marker (still inProgress if any entry)") {
+check("no entries → notStarted; addEntry → inProgress (any record = activity)") {
     var t = makeTask()
+    try expectEqual(t.status, .notStarted)
     _ = t.addEntry(inDay: checkDay, title: "chunk")
-    try expectEqual(t.status, .inProgress)   // 有记录 = 进行中
+    try expectEqual(t.status, .inProgress)
 }
 check("startEntry → inProgress") {
     var t = makeTask()
@@ -89,17 +101,92 @@ check("startEntry → inProgress") {
     try t.startEntry(id: id)
     try expectEqual(t.status, .inProgress)
 }
-check("mark done → done; then addEntry alone stays done; startEntry auto restart → inProgress") {
+check("entry marker no longer drives status; task isDone does; startEntry on a done task still auto-marks restart") {
     var t = makeTask()
     let a = t.addEntry(inDay: checkDay); try t.startEntry(id: a); try t.endEntry(id: a)
     t.updateEntry(id: a) { $0.marker = .done }
+    try expectEqual(t.status, .inProgress)   // marker 只是记录级标注
+    t.setIsDone(true)
     try expectEqual(t.status, .done)
-    let b = t.addEntry(inDay: checkDay)  // 新建但未开始，无 marker
-    try expectEqual(t.status, .done)  // 最后一个有标依然是 done
+    try expectEqual(t.status(in: .day(checkDay)), .done)
+    try expectEqual(t.status(in: .backlog), .done)
+    let b = t.addEntry(inDay: checkDay)
     try t.startEntry(id: b)
-    // startEntry 之前 status 是 done → 自动打 restart marker → 最后有标变 restart → inProgress
-    try expectEqual(t.status, .inProgress)
     try expectEqual(t.entries.first(where: { $0.id == b })?.marker, .restart)
+    try expectEqual(t.status, .done)   // 整体完成标不自动清除
+    t.setIsDone(false)
+    try expectEqual(t.status, .inProgress)
+}
+
+check("day done flag → doneForDay in that day only; setDayDone ignores unassigned days; task isDone overrides") {
+    var t = makeTask()
+    let d2 = Day(year: 2026, month: 7, day: 12)
+    let d3 = Day(year: 2026, month: 7, day: 13)
+    t.meta.membership.upsertDay(checkDay)
+    t.meta.membership.upsertDay(d2)
+    t.setDayDone(inDay: checkDay, isDone: true)
+    t.setDayDone(inDay: d3, isDone: true)   // 未关联 → 忽略
+    try expectEqual(t.meta.membership.days, [checkDay, d2])
+    try expectEqual(t.status(in: .day(checkDay)), .doneForDay)
+    try expectEqual(t.status(in: .day(d2)), .notStarted)
+    try expectEqual(t.status(in: .backlog), .notStarted)
+    try expectEqual(t.status, .notStarted)
+    try expect(t.isUnfinished(inDay: checkDay))   // 非循环：当天完成不算整体完成，仍要跟进
+    t.setIsDone(true)
+    try expectEqual(t.status(in: .day(checkDay)), .done)
+    try expectEqual(t.status(in: .day(d2)), .done)
+    try expect(!t.isUnfinished(inDay: d2))
+}
+
+check("hideDayCompleted filters doneForDay only in day context; hideCompleted leaves doneForDay alone") {
+    let d = Day(year: 2026, month: 7, day: 11)
+    var dayDone = TaskAggregate(meta: TaskMeta(title: "DD", membership: Membership(dayAssignments: [DayAssignment(day: d)])))
+    dayDone.setDayDone(inDay: d, isDone: true)
+    let fullDone = TaskAggregate(meta: TaskMeta(title: "FD", membership: Membership(dayAssignments: [DayAssignment(day: d)]), isDone: true))
+    let open = TaskAggregate(meta: TaskMeta(title: "O", membership: Membership(dayAssignments: [DayAssignment(day: d)])))
+    let all = [dayDone, fullDone, open]
+    try expectEqual(Set(TaskQueries.apply(.day(d), to: all).map(\.meta.title)), ["DD", "FD", "O"])
+    try expectEqual(Set(TaskQueries.apply(.day(d), hideCompleted: true, to: all).map(\.meta.title)), ["DD", "O"])
+    try expectEqual(Set(TaskQueries.apply(.day(d), hideDayCompleted: true, to: all).map(\.meta.title)), ["FD", "O"])
+    // Backlog：只有整体未完成的；当天完成不影响
+    try expectEqual(Set(TaskQueries.apply(.backlog, hideDayCompleted: true, to: all).map(\.meta.title)), ["DD", "O"])
+}
+
+check("backfillDoneFlags: legacy markers → per-day isDone, non-recurring task isDone; idempotent; recurring keeps task flag off") {
+    let d1 = Day(year: 2026, month: 7, day: 11)
+    let d2 = Day(year: 2026, month: 7, day: 12)
+    let doneEntry = TimeEntry(startAt: d1.date().addingTimeInterval(3600),
+                              endAt: d1.date().addingTimeInterval(7200), marker: .done)
+    let openEntry = TimeEntry(startAt: d2.date().addingTimeInterval(3600))
+    var n = TaskAggregate(meta: TaskMeta(title: "N", membership: Membership(
+        dayAssignments: [DayAssignment(day: d1), DayAssignment(day: d2)])), entries: [doneEntry, openEntry])
+    try expectEqual(n.status, .inProgress)
+    try expect(n.backfillDoneFlags())
+    try expect(n.meta.isDone)                       // 全部记录里最后一个有标的是 done
+    try expect(n.meta.membership.isDone(inDay: d1))
+    try expect(!n.meta.membership.isDone(inDay: d2))
+    try expect(!n.backfillDoneFlags())              // 再跑无变化
+    var r = TaskAggregate(meta: TaskMeta(title: "R", membership: Membership(
+        dayAssignments: [DayAssignment(day: d1), DayAssignment(day: d2)]), isRecurring: true), entries: [doneEntry, openEntry])
+    try expect(r.backfillDoneFlags())
+    try expect(!r.meta.isDone)
+    try expectEqual(r.status(in: .day(d1)), .doneForDay)
+    try expectEqual(r.status(in: .day(d2)), .inProgress)
+}
+
+check("isDone flags roundtrip in JSON; missing keys decode as false") {
+    let d = Day(year: 2026, month: 7, day: 11)
+    let meta = TaskMeta(title: "T", membership: Membership(dayAssignments: [DayAssignment(day: d, isDone: true)]), isDone: true)
+    let enc = JSONEncoder(); let dec = JSONDecoder()
+    let back = try dec.decode(TaskMeta.self, from: try enc.encode(meta))
+    try expect(back.isDone)
+    try expect(back.membership.isDone(inDay: d))
+    let legacy = """
+    {"id":"00000000-0000-0000-0000-000000000001","title":"L","membership":{"dayAssignments":[{"day":"2026-07-11","priority":"normal"}]},"createdAt":0,"updatedAt":0}
+    """
+    let l = try dec.decode(TaskMeta.self, from: Data(legacy.utf8))
+    try expect(!l.isDone)
+    try expect(!l.membership.isDone(inDay: d))
 }
 
 check("entryTimeToCarry: recurring picks last day's completed entry, rebased to target day") {
@@ -297,44 +384,40 @@ check("backlog view: time-based sort not applied, priority still primary") {
     try expectEqual(sorted, ["H", "L"])
 }
 
-check("recurring task: statusForDay isolated to that day") {
+check("recurring task: statusForDay isolated to that day (day flag + that day's records only)") {
     let d1 = Day(year: 2026, month: 7, day: 11)
     let d2 = Day(year: 2026, month: 7, day: 12)
-    // 在 d1 打了 done，在 d2 只有一段进行中
-    let d1Entry = TimeEntry(startAt: d1.date().addingTimeInterval(3600),
-                            endAt: d1.date().addingTimeInterval(7200),
-                            marker: .done)
+    let d3 = Day(year: 2026, month: 7, day: 13)
+    // d1 标了当天完成，d2 只有一段进行中，d3 什么都没有
     let d2Entry = TimeEntry(startAt: d2.date().addingTimeInterval(3600))
     let agg = TaskAggregate(
         meta: TaskMeta(title: "recurring", membership: Membership(
-            dayAssignments: [DayAssignment(day: d1), DayAssignment(day: d2)]
+            dayAssignments: [DayAssignment(day: d1, isDone: true), DayAssignment(day: d2), DayAssignment(day: d3)]
         ), isRecurring: true),
-        entries: [d1Entry, d2Entry]
+        entries: [d2Entry]
     )
-    try expectEqual(agg.statusForDay(d1), .done)
+    try expectEqual(agg.statusForDay(d1), .doneForDay)
     try expectEqual(agg.statusForDay(d2), .inProgress)
-    try expectEqual(agg.status(in: .day(d1)), .done)
+    try expectEqual(agg.status(in: .day(d1)), .doneForDay)
     try expectEqual(agg.status(in: .day(d2)), .inProgress)
+    try expectEqual(agg.status(in: .day(d3)), .notStarted)   // 循环任务不看别天的记录
+    try expectEqual(agg.status(in: .backlog), .notStarted)
 }
 
 check("recurring tasks always appear in backlog even if globally done") {
     let d = Day.today()
-    // 全局 status = done
-    let doneEntry = TimeEntry(startAt: Date(), endAt: Date(), marker: .done)
     let recurring = TaskAggregate(
         meta: TaskMeta(title: "R", membership: Membership(
             dayAssignments: [DayAssignment(day: d)]
-        ), isRecurring: true),
-        entries: [doneEntry]
+        ), isRecurring: true, isDone: true)
     )
     let nonRecurring = TaskAggregate(
         meta: TaskMeta(title: "N", membership: Membership(
             dayAssignments: [DayAssignment(day: d)]
-        ), isRecurring: false),
-        entries: [doneEntry]
+        ), isRecurring: false, isDone: true)
     )
     try expectEqual(recurring.status, .done)
-    try expectEqual(recurring.status(in: .backlog), .notStarted)
+    try expectEqual(recurring.status(in: .backlog), .done)   // 整体完成优先
     try expectEqual(nonRecurring.status, .done)
     let backlog = TaskQueries.apply(.backlog, to: [recurring, nonRecurring]).map(\.meta.title)
     try expectEqual(backlog, ["R"])  // 只有循环任务留下
@@ -343,7 +426,6 @@ check("recurring tasks always appear in backlog even if globally done") {
 check("backlogCandidates: excludes done and already-on-day, keyword matches title case-insensitively") {
     let d = Day(year: 2026, month: 10, day: 26)
     let other = Day(year: 2026, month: 10, day: 20)
-    let doneEntry = TimeEntry(startAt: Date(), endAt: Date(), marker: .done)
     let open = TaskAggregate(meta: TaskMeta(title: "Write Report"))
     let onDay = TaskAggregate(meta: TaskMeta(title: "Report review", membership: Membership(
         dayAssignments: [DayAssignment(day: d)]
@@ -353,7 +435,7 @@ check("backlogCandidates: excludes done and already-on-day, keyword matches titl
     )))
     let done = TaskAggregate(meta: TaskMeta(title: "Report done", membership: Membership(
         dayAssignments: [DayAssignment(day: other)]
-    )), entries: [doneEntry])
+    ), isDone: true))
     let all = [open, onDay, elsewhere, done]
     let noKeyword = TaskQueries.backlogCandidates(forDay: d, matching: "", in: all).map(\.meta.title)
     try expectEqual(Set(noKeyword), ["Write Report", "Other thing"])
@@ -362,21 +444,21 @@ check("backlogCandidates: excludes done and already-on-day, keyword matches titl
     try expectEqual(TaskQueries.backlogCandidates(forDay: d, matching: "zzz", in: all).count, 0)
 }
 
-check("pushUncompleted respects per-day status for recurring") {
+check("isUnfinished (push candidates): recurring uses day flag, non-recurring uses task flag only") {
     let src = Day(year: 2026, month: 7, day: 11)
-    // 循环任务在 src 已完成
-    let recurringDone = TimeEntry(startAt: src.date().addingTimeInterval(3600),
-                                  endAt: src.date().addingTimeInterval(7200),
-                                  marker: .done)
-    let recurring = TaskAggregate(
-        meta: TaskMeta(title: "R", membership: Membership(
-            dayAssignments: [DayAssignment(day: src)]
-        ), isRecurring: true),
-        entries: [recurringDone]
-    )
-    try expectEqual(recurring.statusForDay(src), .done)
-    // 不该被推
-    // 说明：这里不便直接跑 store，仅验证 statusForDay 判定；实际 store 逻辑用 statusForDay
+    let recurringDayDone = TaskAggregate(meta: TaskMeta(title: "R", membership: Membership(
+        dayAssignments: [DayAssignment(day: src, isDone: true)]), isRecurring: true))
+    let recurringOpen = TaskAggregate(meta: TaskMeta(title: "R2", membership: Membership(
+        dayAssignments: [DayAssignment(day: src)]), isRecurring: true))
+    let dayDoneOnly = TaskAggregate(meta: TaskMeta(title: "N", membership: Membership(
+        dayAssignments: [DayAssignment(day: src, isDone: true)])))
+    let taskDone = TaskAggregate(meta: TaskMeta(title: "N2", membership: Membership(
+        dayAssignments: [DayAssignment(day: src)]), isDone: true))
+    try expect(!recurringDayDone.isUnfinished(inDay: src))
+    try expect(recurringOpen.isUnfinished(inDay: src))
+    try expect(dayDoneOnly.isUnfinished(inDay: src))     // 当天完成 ≠ 整体完成，仍要推
+    try expect(!taskDone.isUnfinished(inDay: src))
+    // store.pushUncompleted 用的就是 isUnfinished(inDay:)
 }
 
 check("moveEntry: moves to another day, creates assignment with source priority, rebases date part") {
@@ -468,12 +550,8 @@ check("all days: days ascending, category inside day, Backlog last") {
 }
 check("all days: completed task stays under its day but leaves Backlog; empty groups dropped") {
     let d = Day(year: 2026, month: 10, day: 25)
-    let doneEntry = TimeEntry(startAt: d.date().addingTimeInterval(3600),
-                              endAt: d.date().addingTimeInterval(7200),
-                              marker: .done)
     let done = TaskAggregate(
-        meta: TaskMeta(title: "D", membership: Membership(dayAssignments: [DayAssignment(day: d)])),
-        entries: [doneEntry]
+        meta: TaskMeta(title: "D", membership: Membership(dayAssignments: [DayAssignment(day: d)]), isDone: true)
     )
     let groups = TaskQueries.groupAllDays([done], categories: [])
     try expectEqual(groups.map(\.context), [.day(d)])  // Backlog 为空，被丢掉

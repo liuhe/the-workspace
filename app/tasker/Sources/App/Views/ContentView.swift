@@ -29,6 +29,7 @@ struct ContentView: View {
         .onChange(of: store.showCurrent) { _, _ in store.pruneSelectionIfOffscreen() }
         .onChange(of: store.hideCompleted) { _, _ in store.pruneSelectionIfOffscreen() }
         .onChange(of: store.hideNotStarted) { _, _ in store.pruneSelectionIfOffscreen() }
+        .onChange(of: store.hideDayCompleted) { _, _ in store.pruneSelectionIfOffscreen() }
     }
 
     private var navTitle: String {
@@ -42,6 +43,7 @@ struct ContentView: View {
         if store.showCurrent { tags.append("Current") }
         if store.hideCompleted { tags.append("-Done") }
         if store.hideNotStarted { tags.append("-NotStarted") }
+        if store.hideDayCompleted { tags.append("-DoneForDay") }
         return tags.isEmpty ? base : "\(base) · \(tags.joined(separator: " · "))"
     }
 }

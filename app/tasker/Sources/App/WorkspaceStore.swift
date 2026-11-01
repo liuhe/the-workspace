@@ -14,6 +14,8 @@ final class WorkspaceStore: ObservableObject {
     @Published var showCurrent: Bool = false
     @Published var hideCompleted: Bool = false
     @Published var hideNotStarted: Bool = false
+    /// 隐藏"当天已完成"（doneForDay）；只对某天上下文有效
+    @Published var hideDayCompleted: Bool = false
     @Published var selectedTaskId: UUID?
     @Published var currentDescription: String = ""
     @Published private(set) var completedDays: Set<Day> = []
@@ -83,6 +85,7 @@ final class WorkspaceStore: ObservableObject {
                                  currentOnly: showCurrent,
                                  hideCompleted: hideCompleted,
                                  hideNotStarted: hideNotStarted,
+                                 hideDayCompleted: hideDayCompleted,
                                  to: tasks)
     }
 
@@ -96,7 +99,8 @@ final class WorkspaceStore: ObservableObject {
                                  categories: settings.categories,
                                  currentOnly: showCurrent,
                                  hideCompleted: hideCompleted,
-                                 hideNotStarted: hideNotStarted)
+                                 hideNotStarted: hideNotStarted,
+                                 hideDayCompleted: hideDayCompleted)
     }
 
     /// 所有日期模式：是否所有分组都已折叠（空列表视为未全折叠）
@@ -298,17 +302,44 @@ final class WorkspaceStore: ObservableObject {
         updateMeta(id: id) { $0.isRecurring = isRecurring }
     }
 
+    // MARK: - 完成标
+
+    /// 任务整体完成 / 重新打开
+    func setIsDone(id: UUID, isDone: Bool) {
+        guard let idx = tasks.firstIndex(where: { $0.id == id }) else { return }
+        var agg = tasks[idx]
+        agg.setIsDone(isDone)
+        _ = persist(&agg, at: idx)
+    }
+
+    /// 某天关联上的"当天已完成"标
+    func setDayDone(id: UUID, inDay day: Day, isDone: Bool) {
+        guard let idx = tasks.firstIndex(where: { $0.id == id }) else { return }
+        var agg = tasks[idx]
+        agg.setDayDone(inDay: day, isDone: isDone)
+        _ = persist(&agg, at: idx)
+    }
+
+    /// 设置页：按旧 marker 规则回填所有任务的完成标；返回有变化的任务数
+    @discardableResult
+    func backfillDoneFlags() -> Int {
+        var changedCount = 0
+        for idx in tasks.indices {
+            var agg = tasks[idx]
+            guard agg.backfillDoneFlags() else { continue }
+            if persist(&agg, at: idx) { changedCount += 1 }
+        }
+        return changedCount
+    }
+
     /// 把 sourceDay 下所有未完成任务在 targetDay 上建立关联；priority 复制自 sourceDay 关联。
-    /// - 循环任务：以 sourceDay 上的当日 status 判定"未完成"
-    /// - 非循环：以全局 status 判定
+    /// "未完成"见 `TaskAggregate.isUnfinished(inDay:)`（循环看当天完成标，非循环看整体完成标）
     /// - 目标日已经关联的任务不覆盖它已有的 priority
     @discardableResult
     func pushUncompleted(from sourceDay: Day, to targetDay: Day) -> Int {
         guard sourceDay != targetDay else { return 0 }
         let candidates = tasks.filter {
-            guard $0.meta.membership.days.contains(sourceDay) else { return false }
-            let s = $0.meta.isRecurring ? $0.statusForDay(sourceDay) : $0.status
-            return s != .done
+            $0.meta.membership.days.contains(sourceDay) && $0.isUnfinished(inDay: sourceDay)
         }
         var addedToTarget = false
         for c in candidates {

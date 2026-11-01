@@ -147,7 +147,7 @@ private struct PushToDaySheet: View {
 
     private var uncompletedCount: Int {
         store.tasks.filter {
-            $0.meta.membership.days.contains(sourceDay) && $0.status != .done
+            $0.meta.membership.days.contains(sourceDay) && $0.isUnfinished(inDay: sourceDay)
         }.count
     }
 
@@ -271,7 +271,7 @@ private struct CollapseAllButton: View {
     }
 }
 
-// MARK: - 状态过滤下拉（3 个独立开关）
+// MARK: - 状态过滤下拉（4 个独立开关）
 
 private struct StatusFilterMenu: View {
     @EnvironmentObject var store: WorkspaceStore
@@ -281,19 +281,23 @@ private struct StatusFilterMenu: View {
             Toggle("Current only", isOn: $store.showCurrent)
             Toggle("Hide completed", isOn: $store.hideCompleted)
             Toggle("Hide not started", isOn: $store.hideNotStarted)
+            // 只在某天 / 所有日期下有意义（Backlog 下不会出现"当天已完成"）
+            Toggle("Hide done for day", isOn: $store.hideDayCompleted)
+                .disabled(store.scope == .backlog)
         } label: {
             Image(systemName: activeCount > 0 ? "line.3.horizontal.decrease.circle.fill"
                                               : "line.3.horizontal.decrease.circle")
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
-        .help("Filter: current / completed / not started")
+        .help("Filter: current / completed / not started / done for day")
     }
 
     private var activeCount: Int {
         (store.showCurrent ? 1 : 0)
             + (store.hideCompleted ? 1 : 0)
             + (store.hideNotStarted ? 1 : 0)
+            + (store.hideDayCompleted ? 1 : 0)
     }
 }
 
@@ -569,6 +573,19 @@ private struct TaskContextMenu: View {
             }
         }
         Divider()
+        // 完成标：整体完成优先；某天上下文且未整体完成时再给"当天已完成"
+        Button(aggregate.meta.isDone ? "Reopen task" : "Mark task done") {
+            store.setIsDone(id: aggregate.id, isDone: !aggregate.meta.isDone)
+        }
+        if case .day(let d) = context,
+           aggregate.meta.membership.days.contains(d),
+           !aggregate.meta.isDone {
+            let dayDone = aggregate.meta.membership.isDone(inDay: d)
+            Button(dayDone ? "Not done for \(d.description)" : "Done for \(d.description)") {
+                store.setDayDone(id: aggregate.id, inDay: d, isDone: !dayDone)
+            }
+        }
+        Divider()
         Button {
             let path = store.descriptionURL(for: aggregate.id).path
             let pb = NSPasteboard.general
@@ -642,16 +659,24 @@ private struct TaskRow: View {
     }
 }
 
+/// 状态点：实心 = 未开始(灰) / 进行中(蓝) / 整体完成(绿)；绿色空心环 = 仅当天完成
 private struct StatusDot: View {
     let status: TaskStatus
     var body: some View {
-        Circle().fill(color).frame(width: 8, height: 8)
+        Group {
+            if status == .doneForDay {
+                Circle().strokeBorder(Color.green, lineWidth: 1.5)
+            } else {
+                Circle().fill(color)
+            }
+        }
+        .frame(width: 8, height: 8)
     }
     private var color: Color {
         switch status {
         case .notStarted: return .gray
         case .inProgress: return .blue
-        case .done: return .green
+        case .doneForDay, .done: return .green
         }
     }
 }

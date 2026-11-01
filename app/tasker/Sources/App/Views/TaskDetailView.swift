@@ -202,14 +202,33 @@ private struct TaskInfoSection: View {
 
     private var contextualStatus: TaskStatus { aggregate.status(in: context) }
 
+    /// 状态徽章即完成标菜单：整体完成 / 重开；某天上下文且未整体完成时再给当天完成
     private var statusBadge: some View {
         HStack(spacing: 4) {
-            Text(contextualStatus.displayName)
-                .font(.caption)
-                .padding(.horizontal, 8).padding(.vertical, 3)
-                .background(badgeColor.opacity(0.2))
-                .foregroundStyle(badgeColor)
-                .clipShape(Capsule())
+            Menu {
+                Button(aggregate.meta.isDone ? "Reopen task" : "Mark task done") {
+                    store.setIsDone(id: aggregate.id, isDone: !aggregate.meta.isDone)
+                }
+                if case .day(let d) = context,
+                   aggregate.meta.membership.days.contains(d),
+                   !aggregate.meta.isDone {
+                    let dayDone = aggregate.meta.membership.isDone(inDay: d)
+                    Button(dayDone ? "Not done for \(d.description)" : "Done for \(d.description)") {
+                        store.setDayDone(id: aggregate.id, inDay: d, isDone: !dayDone)
+                    }
+                }
+            } label: {
+                Text(contextualStatus.displayName)
+                    .font(.caption)
+                    .padding(.horizontal, 8).padding(.vertical, 3)
+                    .background(badgeColor.opacity(0.2))
+                    .foregroundStyle(badgeColor)
+                    .clipShape(Capsule())
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help("Mark done / reopen")
             if aggregate.meta.isRecurring {
                 Text("🔁").font(.body)
             }
@@ -219,7 +238,7 @@ private struct TaskInfoSection: View {
         switch contextualStatus {
         case .notStarted: return .gray
         case .inProgress: return .blue
-        case .done: return .green
+        case .doneForDay, .done: return .green
         }
     }
 

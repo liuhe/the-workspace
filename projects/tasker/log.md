@@ -530,3 +530,17 @@
 - FilterMenu 日期项 `-3...3` → `-10...3`；Add to 菜单与移记录菜单仍是前后 3 天，未改
 - overview UI 布局 / tasks 已同步
 - build 通过；check 47 全绿；未提交、未发版；UI 待用户装 Release 验证
+
+## 2026-11-01 完成状态改为显式标记
+
+- 用户反馈靠时间记录 marker 推导完成"不好用"。模型调整（overview 领域模型已同步）：
+  - `TaskMeta.isDone`：整体完成，**优先于一切**；Backlog = `!isDone || isRecurring`
+  - `DayAssignment.isDone`：当天完成；仅在某天上下文、任务未整体完成时显示为新状态 `TaskStatus.doneForDay`
+  - 状态推导：isDone → done；某天 isDone → doneForDay；否则 `StatusDeriver.activity`（有非未来记录 → inProgress，否则 notStarted）。非循环任务某天上下文的活动态仍按全部记录算（沿用旧行为），循环任务只看该天
+  - 记录 marker 保留不动、不再参与状态；`StatusDeriver.derive` 降级为"旧规则"，只给回填用
+  - "推到另一天"候选改用 `isUnfinished(inDay:)`：循环看当天标，非循环只看整体标（当天完成 ≠ 整体完成，仍要推）
+  - `startEntry` 在 done / doneForDay 上再开始仍自动打 restart marker，但不清完成标
+- 代码：Domain（Task / TaskStatus / TaskQueries 新增 `hideDayCompleted`）、Store（`setIsDone` / `setDayDone` / `backfillDoneFlags` 返回变更任务数 / `hideDayCompleted`）、侧栏（StatusFilterMenu 第 4 个开关，Backlog 下置灰；StatusDot 空心环；右键 Mark task done / Reopen task / Done for <day>）、详情（状态徽章变菜单）、甘特图左列 doneForDay 用 checkmark.circle、窗口标题 tag `-DoneForDay`、设置页新增 Maintenance 段
+- 旧数据兼容：两个 isDone 都 decodeIfPresent 默认 false；用户需在设置页点一次 Backfill 把历史 marker 推出的完成态写进标记，否则旧的已完成任务会回到 Backlog
+- check：重写 6 个 marker 驱动的用例，新增 5 个（activity / 当天完成 / hideDayCompleted / 回填幂等 / JSON 兼容）；52 全绿
+- build 通过；未提交、未发版；UI 待用户装 Release 验证
