@@ -21,7 +21,7 @@ tasker 走 **GitHub Actions + git tag** 的方式发版；tag 推上去 CI 自�
 
 `.github/workflows/release.yml` 步骤：
 
-1. 用 `macos-14` runner（自带 Xcode + Swift）
+1. 用 `macos-15` runner（自带 Xcode + Swift；`macos-14` 镜像已被 GitHub 下线，2026-11 起 job 直接被取消）
 2. `swift build -c release --arch arm64 --arch x86_64` → 一份 **universal binary**（同时含 arm64 + x86_64 slice）
 3. `lipo -verify_arch` 校验两个架构都在
 4. `scripts/make-icon.sh` → 用 `iconGen` target 渲染 10 张尺寸 PNG → `iconutil` 打成 `AppIcon.icns`
