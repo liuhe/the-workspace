@@ -784,6 +784,46 @@ check("legacy entries.jsonl migrates into day assignment entries and archives") 
     try expect(FileManager.default.fileExists(atPath: layout.entriesLegacyFile.path))
 }
 
+// MARK: - TaskTimeStats（统计：跨日期合并）
+print("TaskTimeStats")
+
+check("stats: merges entries across days per task; manual minutes override start/end") {
+    let d1 = Day(year: 2026, month: 11, day: 20)
+    let d2 = Day(year: 2026, month: 11, day: 21)
+    let d3 = Day(year: 2026, month: 11, day: 25)
+    let catA = CategoryDef(name: "A")
+    let catB = CategoryDef(name: "B")
+    func at(_ d: Day, _ h: Double) -> Date { d.date().addingTimeInterval(h * 3600) }
+    // 任务 1：d1 1h（起止）+ d2 起止 2h 但手填 30 分钟 + d3 1h（区间外）
+    let t1 = TaskAggregate(meta: TaskMeta(title: "t1", categoryId: catA.id, membership: Membership(dayAssignments: [
+        DayAssignment(day: d1, entries: [TimeEntry(startAt: at(d1, 9), endAt: at(d1, 10))]),
+        DayAssignment(day: d2, entries: [TimeEntry(startAt: at(d2, 9), endAt: at(d2, 11), actualMinutes: 30)]),
+        DayAssignment(day: d3, entries: [TimeEntry(startAt: at(d3, 9), endAt: at(d3, 10))]),
+    ])))
+    // 任务 2：只有手填分钟、无起止 45m + 一条未结束（0）
+    let t2 = TaskAggregate(meta: TaskMeta(title: "t2", categoryId: catA.id, membership: Membership(dayAssignments: [
+        DayAssignment(day: d2, entries: [TimeEntry(actualMinutes: 45), TimeEntry(startAt: at(d2, 13))]),
+    ])))
+    // 任务 3：B 分类 d1 3h；任务 4：无记录 → 不出现
+    let t3 = TaskAggregate(meta: TaskMeta(title: "t3", categoryId: catB.id, membership: Membership(dayAssignments: [
+        DayAssignment(day: d1, entries: [TimeEntry(startAt: at(d1, 14), endAt: at(d1, 17))]),
+    ])))
+    let t4 = TaskAggregate(meta: TaskMeta(title: "t4", categoryId: catB.id, membership: Membership(dayAssignments: [DayAssignment(day: d1)])))
+
+    let stats = TaskTimeStats.build(from: [t1, t2, t3, t4], categories: [catA, catB], range: d1...d2)
+    try expectEqual(stats.map(\.def.name), ["A", "B"])
+    try expectEqual(stats[0].tasks.map(\.task.meta.title), ["t1", "t2"])
+    try expectEqual(stats[0].tasks[0].totalDuration, 90 * 60)
+    try expectEqual(stats[0].tasks[0].entries.map(\.day), [d1, d2])
+    try expectEqual(stats[0].tasks[1].totalDuration, 45 * 60)
+    try expectEqual(stats[0].totalDuration, 135 * 60)
+    try expectEqual(stats[1].tasks.map(\.task.meta.title), ["t3"])
+    try expectEqual(stats[1].totalDuration, 3 * 3600)
+
+    let all = TaskTimeStats.build(from: [t1, t2, t3, t4], categories: [catA, catB])
+    try expectEqual(all[0].tasks.first { $0.task.meta.title == "t1" }?.totalDuration, 150 * 60)
+}
+
 print("---")
 print("passed: \(passed)  failed: \(failed)")
 if failed > 0 { exit(1) }

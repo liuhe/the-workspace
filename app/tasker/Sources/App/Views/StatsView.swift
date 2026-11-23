@@ -1,82 +1,7 @@
 import SwiftUI
 import TaskerDomain
 
-// MARK: - 汇总数据
-
-struct DayStat: Identifiable {
-    let day: Day
-    let categories: [CategoryDayStat]
-    var id: Day { day }
-    var tasks: [TaskDayStat] { categories.flatMap(\.tasks) }
-    var totalDuration: TimeInterval { categories.reduce(0) { $0 + $1.totalDuration } }
-    var ranges: [(Date, Date)] { categories.flatMap(\.ranges) }
-}
-
-/// 某天 → 某分类下的任务汇总；顺序跟随设置里的分类顺序
-struct CategoryDayStat: Identifiable {
-    let day: Day
-    let def: CategoryDef
-    /// 设置里的槽位（用于自动色）；未知 / 未设置分类为 nil
-    let slot: Int?
-    let tasks: [TaskDayStat]
-    var id: UUID { def.id }
-    var totalDuration: TimeInterval { tasks.reduce(0) { $0 + $1.totalDuration } }
-    var ranges: [(Date, Date)] { tasks.flatMap(\.ranges) }
-}
-
-struct TaskDayStat: Identifiable {
-    let day: Day
-    let task: TaskAggregate
-    let entries: [TimeEntry]
-    var id: UUID { task.id }
-    /// 实际占用：手动分钟数优先，否则起止时间差
-    var totalDuration: TimeInterval {
-        entries.compactMap { $0.effectiveDuration(inDay: day) }.reduce(0, +)
-    }
-    var ranges: [(Date, Date)] {
-        entries.compactMap { e in
-            guard let s = e.startAt(inDay: day), let en = e.endAt(inDay: day) else { return nil }
-            return (s, en)
-        }
-    }
-}
-
-enum StatsBuilder {
-    /// 按 (day assignment, task) 汇总时间记录；日期升序。
-    /// `range` 非 nil 时只保留落在闭区间内的 day assignments。
-    static func build(from tasks: [TaskAggregate],
-                      categories: [CategoryDef],
-                      range: ClosedRange<Day>? = nil,
-                      calendar: Calendar = .current) -> [DayStat] {
-        var byDay: [Day: [UUID: [TimeEntry]]] = [:]
-        var taskById: [UUID: TaskAggregate] = [:]
-        for t in tasks {
-            taskById[t.id] = t
-            for assignment in t.meta.membership.dayAssignments where !assignment.entries.isEmpty {
-                if let range, !range.contains(assignment.day) { continue }
-                byDay[assignment.day, default: [:]][t.id, default: []].append(contentsOf: assignment.entries)
-            }
-        }
-        return byDay.keys.sorted().map { day in
-            let bucket = byDay[day]!
-            let stats: [TaskDayStat] = bucket.map { (tid, es) in
-                let sorted = es.sorted {
-                    ($0.startAt(inDay: day) ?? .distantFuture) < ($1.startAt(inDay: day) ?? .distantFuture)
-                }
-                return TaskDayStat(day: day, task: taskById[tid]!, entries: sorted)
-            }.sorted { $0.totalDuration > $1.totalDuration }
-            // 按分类分组（顺序跟设置），组内保持时长降序
-            let statByTask = Dictionary(uniqueKeysWithValues: stats.map { ($0.task.id, $0) })
-            let grouped = TaskQueries.groupByCategory(stats.map(\.task), categories: categories)
-            let cats: [CategoryDayStat] = grouped.map { (def, ts) in
-                CategoryDayStat(day: day, def: def,
-                                slot: categories.firstIndex(where: { $0.id == def.id }),
-                                tasks: ts.compactMap { statByTask[$0.id] })
-            }
-            return DayStat(day: day, categories: cats)
-        }
-    }
-}
+// 汇总数据见 Domain `TaskTimeStats`：日期区间内跨天合并，分类 → 任务 → 记录
 
 // MARK: - 格式化
 
@@ -94,51 +19,33 @@ enum StatsFormat {
     }
 }
 
-// MARK: - Gantt 条（0-24h 时间轴）
+// MARK: - 占比条（该行花费 / 区间总花费）
 
-struct GanttBar: View {
-    let day: Day
-    let ranges: [(Date, Date)]
+struct ShareBar: View {
+    let fraction: Double
     let color: Color
     var height: CGFloat = 10
 
     var body: some View {
         GeometryReader { geo in
-            let w = geo.size.width
             ZStack(alignment: .leading) {
                 RoundedRectangle(cornerRadius: 2)
                     .fill(Color.secondary.opacity(0.08))
-                    .frame(height: height)
-                ForEach(0..<ranges.count, id: \.self) { i in
-                    let (x, sw) = geometry(for: ranges[i], width: w)
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(color)
-                        .frame(width: sw, height: height)
-                        .offset(x: x)
-                }
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(color)
+                    .frame(width: fraction > 0 ? max(2, CGFloat(min(1, fraction)) * geo.size.width) : 0)
             }
         }
         .frame(height: height)
-    }
-
-    private func geometry(for range: (Date, Date), width: CGFloat) -> (CGFloat, CGFloat) {
-        let cal = Calendar.current
-        let start = cal.startOfDay(for: day.date(calendar: cal))
-        let dayLen: TimeInterval = 86400
-        let fs = max(0, min(1, range.0.timeIntervalSince(start) / dayLen))
-        let fe = max(0, min(1, range.1.timeIntervalSince(start) / dayLen))
-        let x = CGFloat(fs) * width
-        let sw = max(2, CGFloat(max(fe - fs, 0)) * width)
-        return (x, sw)
     }
 }
 
 // MARK: - 行选中标识
 
 enum StatsRowID: Hashable {
-    case day(Day)
-    case category(Day, UUID)
-    case task(Day, UUID)
+    case total
+    case category(UUID)
+    case task(UUID)
     case entry(UUID)
 }
 
@@ -153,6 +60,8 @@ struct StatsView: View {
     @State private var endDate: Date = Calendar.current.startOfDay(for: Date())
 
     var body: some View {
+        let categories = self.categories
+        let total = categories.reduce(0) { $0 + $1.totalDuration }
         VStack(spacing: 0) {
             HStack(spacing: 12) {
                 Text("Statistics").font(.title2)
@@ -165,18 +74,28 @@ struct StatsView: View {
             .padding(16)
             Divider()
 
-            if days.isEmpty {
+            if categories.isEmpty {
                 Spacer()
-                Text("No timed entries in this range.").foregroundStyle(.secondary)
+                Text("No time entries in this range.").foregroundStyle(.secondary)
                 Spacer()
             } else {
-                HourRulerHeader()
-                    .padding(.horizontal, 16)
-                    .padding(.top, 2)
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
-                        ForEach(days) {
-                            DayBlock(day: $0, editing: editing, selection: $selection)
+                        StatsRow(
+                            rowID: .total,
+                            selection: $selection,
+                            indent: 0,
+                            expandable: .none,
+                            label: "Total · \(categories.reduce(0) { $0 + $1.tasks.count }) tasks",
+                            labelFont: .headline,
+                            timeCell: .none,
+                            fraction: total > 0 ? 1 : 0,
+                            color: .indigo,
+                            duration: total
+                        )
+                        Divider().padding(.vertical, 4)
+                        ForEach(categories) {
+                            CategoryBlock(category: $0, grandTotal: total, editing: editing, selection: $selection)
                         }
                     }
                     .padding(.horizontal, 16)
@@ -187,11 +106,11 @@ struct StatsView: View {
         }
     }
 
-    private var days: [DayStat] {
+    private var categories: [CategoryTimeStat] {
         let s = Day(date: startDate)
         let e = Day(date: endDate)
         let range = s <= e ? s...e : e...s
-        return StatsBuilder.build(from: store.tasks, categories: store.settings.categories, range: range)
+        return TaskTimeStats.build(from: store.tasks, categories: store.settings.categories, range: range)
     }
 
     private static func defaultStartDate() -> Date {
@@ -218,195 +137,135 @@ private struct DateRangePicker: View {
     }
 }
 
-// MARK: - 顶部时间刻度（与下方 Gantt 列对齐）
-
-private struct HourRulerHeader: View {
-    var body: some View {
-        HStack(spacing: 10) {
-            Spacer().frame(width: 260)
-            Spacer().frame(width: 200)
-            HourRuler().frame(maxWidth: .infinity)
-            Spacer().frame(width: 70)
-        }
-        .padding(.horizontal, 4)
-        .frame(height: HourRuler.totalHeight)
-    }
-}
-
-private struct HourRuler: View {
-    static let tickHeight: CGFloat = 4
-    static let labelHeight: CGFloat = 10
-    static let totalHeight: CGFloat = tickHeight + labelHeight
-
-    var body: some View {
-        Canvas { ctx, size in
-            let w = size.width
-            let majorColor = GraphicsContext.Shading.color(.secondary.opacity(0.55))
-            let minorColor = GraphicsContext.Shading.color(.secondary.opacity(0.22))
-            for h in 0...24 {
-                let x = CGFloat(h) / 24 * w
-                let isMajor = h % 3 == 0
-                let th = isMajor ? Self.tickHeight : Self.tickHeight * 0.6
-                ctx.fill(
-                    Path(CGRect(x: x, y: 0, width: 1, height: th)),
-                    with: isMajor ? majorColor : minorColor
-                )
-                if isMajor {
-                    let label = Text(String(format: "%02d", h))
-                        .font(.system(size: 8, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                    ctx.draw(label, at: CGPoint(x: x, y: Self.tickHeight + Self.labelHeight / 2), anchor: .center)
-                }
-            }
-        }
-        .frame(height: Self.totalHeight)
-    }
-}
-
 // MARK: - 块（组合行 + 子行）
-
-private struct DayBlock: View {
-    let day: DayStat
-    let editing: Bool
-    @Binding var selection: StatsRowID?
-    @State private var expanded = true
-
-    var body: some View {
-        StatsRow(
-            rowID: .day(day.day),
-            selection: $selection,
-            indent: 0,
-            expandable: .binding($expanded, enabled: !day.tasks.isEmpty),
-            label: day.day.descriptionWithWeekday,
-            labelFont: .headline,
-            timeCell: .none,
-            day: day.day,
-            ranges: day.ranges,
-            color: .indigo,
-            duration: day.totalDuration
-        )
-        if expanded {
-            ForEach(day.categories) {
-                CategoryBlock(dayContext: day.day, category: $0, editing: editing, selection: $selection)
-            }
-        }
-        Divider().padding(.vertical, 4)
-    }
-}
 
 private struct CategoryBlock: View {
     @Environment(\.colorScheme) private var scheme
-    let dayContext: Day
-    let category: CategoryDayStat
+    let category: CategoryTimeStat
+    let grandTotal: TimeInterval
     let editing: Bool
     @Binding var selection: StatsRowID?
     @State private var expanded = true
 
     var body: some View {
+        let color = CategoryColor.resolve(def: category.def, slot: category.slot, scheme: scheme)
         StatsRow(
-            rowID: .category(dayContext, category.def.id),
+            rowID: .category(category.def.id),
             selection: $selection,
-            indent: 24,
+            indent: 0,
             expandable: .binding($expanded, enabled: !category.tasks.isEmpty),
             label: category.def.name,
             labelFont: .body.weight(.semibold),
             timeCell: .none,
-            day: dayContext,
-            ranges: category.ranges,
-            color: CategoryColor.resolve(def: category.def, slot: category.slot, scheme: scheme),
+            fraction: share(category.totalDuration),
+            color: color,
             duration: category.totalDuration
         )
         if expanded {
             ForEach(category.tasks) {
-                TaskBlock(dayContext: dayContext, task: $0, editing: editing, selection: $selection)
+                TaskBlock(task: $0, grandTotal: grandTotal, color: color, editing: editing, selection: $selection)
             }
         }
+        Divider().padding(.vertical, 4)
     }
+
+    private func share(_ d: TimeInterval) -> Double { grandTotal > 0 ? d / grandTotal : 0 }
 }
 
 private struct TaskBlock: View {
-    let dayContext: Day
-    let task: TaskDayStat
+    let task: TaskTimeStat
+    let grandTotal: TimeInterval
+    let color: Color
     let editing: Bool
     @Binding var selection: StatsRowID?
     @State private var expanded = false
 
     var body: some View {
         StatsRow(
-            rowID: .task(dayContext, task.task.id),
+            rowID: .task(task.task.id),
             selection: $selection,
-            indent: 48,
+            indent: 24,
             expandable: .binding($expanded, enabled: !task.entries.isEmpty),
             label: task.task.meta.title.isEmpty ? "(Untitled)" : task.task.meta.title,
             labelFont: .body,
-            timeCell: .none,
-            day: dayContext,
-            ranges: task.ranges,
-            color: .teal,
+            timeCell: .display(dayCountText),
+            fraction: grandTotal > 0 ? task.totalDuration / grandTotal : 0,
+            color: color.opacity(0.75),
             duration: task.totalDuration
         )
         if expanded {
-            ForEach(task.entries, id: \.id) { e in
-                EntryRow(dayContext: dayContext, taskId: task.task.id, entry: e, editing: editing, selection: $selection)
+            ForEach(task.entries) { e in
+                EntryRow(taskId: task.task.id, dated: e, grandTotal: grandTotal,
+                         color: color.opacity(0.5), editing: editing, selection: $selection)
             }
         }
+    }
+
+    private var dayCountText: String {
+        let days = Set(task.entries.map(\.day)).count
+        let n = task.entries.count
+        return "\(n) \(n == 1 ? "entry" : "entries") · \(days) \(days == 1 ? "day" : "days")"
     }
 }
 
 private struct EntryRow: View {
     @EnvironmentObject var store: WorkspaceStore
-    let dayContext: Day
     let taskId: UUID
-    let entry: TimeEntry
+    let dated: DatedEntry
+    let grandTotal: TimeInterval
+    let color: Color
     let editing: Bool
     @Binding var selection: StatsRowID?
 
+    private var entry: TimeEntry { dated.entry }
+
     var body: some View {
-        let range: [(Date, Date)] = {
-            if let s = entry.startAt(inDay: dayContext), let e = entry.endAt(inDay: dayContext) {
-                return [(s, e)]
-            }
-            return []
-        }()
+        let d = dated.duration()
         StatsRow(
             rowID: .entry(entry.id),
             selection: $selection,
-            indent: 72,
+            indent: 48,
             expandable: .none,
             label: entry.title.isEmpty ? "(no title)" : entry.title,
             labelFont: .callout,
-            timeCell: editing ? .editable(startBinding(), endBinding(), startExists: entry.startAt != nil, endExists: entry.endAt != nil)
-                              : .display(displayTimeText),
-            day: dayContext,
-            ranges: range,
-            color: .blue,
-            duration: entry.effectiveDuration(inDay: dayContext) ?? 0
+            timeCell: editing ? .editable(dayText, startBinding(), endBinding(),
+                                          startExists: entry.startAt != nil, endExists: entry.endAt != nil)
+                              : .display("\(dayText)  \(displayTimeText)"),
+            fraction: grandTotal > 0 ? d / grandTotal : 0,
+            color: color,
+            duration: d,
+            isManualDuration: entry.actualMinutes != nil
         )
     }
 
-    private var displayTimeText: String? {
-        if let s = entry.startAt, let e = entry.endAt {
+    /// "11-20 Thu"
+    private var dayText: String {
+        String(format: "%02d-%02d ", dated.day.month, dated.day.day) + dated.day.weekdayLabel()
+    }
+
+    private var displayTimeText: String {
+        if let s = dated.startAt(), let e = dated.endAt() {
             return "\(StatsFormat.timeOnly(s)) – \(StatsFormat.timeOnly(e))"
         }
-        if let s = entry.startAt {
+        if let s = dated.startAt() {
             return "\(StatsFormat.timeOnly(s)) – …"
         }
         return "not started"
     }
 
-    /// 默认 12:00 于 dayContext 那天，作为 DatePicker 的起点
+    /// 默认 12:00 于记录所属那天，作为 DatePicker 的起点
     private var defaultStart: Date {
         let cal = Calendar.current
-        let dayStart = cal.startOfDay(for: dayContext.date(calendar: cal))
+        let dayStart = cal.startOfDay(for: dated.day.date(calendar: cal))
         return dayStart.addingTimeInterval(12 * 3600)
     }
     private var defaultEnd: Date {
-        (entry.startAt ?? defaultStart).addingTimeInterval(3600)
+        (dated.startAt() ?? defaultStart).addingTimeInterval(3600)
     }
 
     private func startBinding() -> Binding<Date> {
         Binding<Date>(
-            get: { entry.startAt ?? defaultStart },
+            get: { dated.startAt() ?? defaultStart },
             set: { new in
                 store.updateEntry(taskId: taskId, entryId: entry.id) { $0.startAt = new }
             }
@@ -414,7 +273,7 @@ private struct EntryRow: View {
     }
     private func endBinding() -> Binding<Date> {
         Binding<Date>(
-            get: { entry.endAt ?? defaultEnd },
+            get: { dated.endAt() ?? defaultEnd },
             set: { new in
                 store.updateEntry(taskId: taskId, entryId: entry.id) { $0.endAt = new }
             }
@@ -423,7 +282,7 @@ private struct EntryRow: View {
 }
 
 // MARK: - 统一行布局
-// [Label(260, 含缩进+chevron)] [TimeCell(200)] [Gantt(maxWidth)] [Duration(70)]
+// [Label(260, 含缩进+chevron)] [TimeCell(230)] [占比条(maxWidth)] [Duration(70)]
 
 private struct StatsRow: View {
     let rowID: StatsRowID
@@ -433,10 +292,11 @@ private struct StatsRow: View {
     let label: String
     let labelFont: Font
     let timeCell: TimeCell
-    let day: Day
-    let ranges: [(Date, Date)]
+    let fraction: Double
     let color: Color
     let duration: TimeInterval
+    /// 手动填了实际占用的记录：时长加括号（同甘特图色块标题的约定）
+    var isManualDuration: Bool = false
 
     enum Expandable {
         case none
@@ -447,7 +307,7 @@ private struct StatsRow: View {
         case none
         case display(String?)
         /// startExists/endExists 表示原值是否已设定；未设定时 UI 淡显示，暗示"点了才生效"
-        case editable(Binding<Date>, Binding<Date>, startExists: Bool, endExists: Bool)
+        case editable(String, Binding<Date>, Binding<Date>, startExists: Bool, endExists: Bool)
     }
 
     private var isSelected: Bool { selection == rowID }
@@ -455,13 +315,14 @@ private struct StatsRow: View {
     var body: some View {
         HStack(spacing: 10) {
             labelCell.frame(width: 260, alignment: .leading)
-            timeCellView.frame(width: 200, alignment: .leading)
-            GanttBar(day: day, ranges: ranges, color: color)
+            timeCellView.frame(width: 230, alignment: .leading)
+            ShareBar(fraction: fraction, color: color)
                 .frame(maxWidth: .infinity)
-            Text(StatsFormat.duration(duration))
+            Text(isManualDuration ? "(\(StatsFormat.duration(duration)))" : StatsFormat.duration(duration))
                 .font(.system(.callout, design: .monospaced))
                 .foregroundStyle(.secondary)
                 .frame(width: 70, alignment: .trailing)
+                .help(isManualDuration ? "Manually entered actual time" : "")
         }
         .padding(.vertical, 3)
         .padding(.horizontal, 4)
@@ -523,8 +384,11 @@ private struct StatsRow: View {
             } else {
                 Color.clear
             }
-        case .editable(let startBind, let endBind, let startExists, let endExists):
+        case .editable(let dayText, let startBind, let endBind, let startExists, let endExists):
             HStack(spacing: 4) {
+                Text(dayText)
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
                 DatePicker("", selection: startBind, displayedComponents: [.hourAndMinute])
                     .labelsHidden()
                     .controlSize(.mini)

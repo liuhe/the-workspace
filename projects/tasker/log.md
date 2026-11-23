@@ -544,3 +544,11 @@
 - 旧数据兼容：两个 isDone 都 decodeIfPresent 默认 false；用户需在设置页点一次 Backfill 把历史 marker 推出的完成态写进标记，否则旧的已完成任务会回到 Backlog
 - check：重写 6 个 marker 驱动的用例，新增 5 个（activity / 当天完成 / hideDayCompleted / 回填幂等 / JSON 兼容）；52 全绿
 - build 通过；未提交、未发版；UI 待用户装 Release 验证
+
+## 2026-11-23 统计窗口改为跨日期合并
+
+- 用户要求统计页不再按天分组，改为把所有日期合并统计任务花费；任务花费来自时间记录，记录有手填实际占用用手填，否则用起止时间算
+- 领域：新增 `Domain/TaskTimeStats.swift`（`DatedEntry` / `TaskTimeStat` / `CategoryTimeStat` / `TaskTimeStats.build`），汇总逻辑从 App 层 `StatsBuilder` 下沉到 Domain，可被 check 覆盖；记录时长复用 `TimeEntry.effectiveDuration(inDay:)`
+- UI：`StatsView` 去掉天层级与 0–24h 刻度 / Gantt 条（跨天叠加无意义），改为 Total → 分类 → 任务 → 记录 + 占比条；记录行带日期；保留日期区间选择器作为统计范围、保留 Edit 模式
+- check 新增 1 项（跨天合并 / 手填优先 / 区间过滤 / 无记录任务不出现）；53 全绿；build 通过；未提交、未发版；UI 待用户装 Release 验证
+
